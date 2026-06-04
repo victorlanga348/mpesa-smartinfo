@@ -1,9 +1,34 @@
 import { AdminMetrics, Request } from '../types'
 import { MOCK_AGENTS, CRITICAL_ZONES } from '../mock-data'
+import { getApiUrl } from '@/lib/socket'
 
 export const adminService = {
   // Get admin metrics
   async getMetrics(): Promise<AdminMetrics> {
+    try {
+      const response = await fetch(`${getApiUrl()}/admin/stats`)
+      const data = await response.json()
+
+      if (response.ok) {
+        return {
+          totalUsers: data.totalUsers ?? 0,
+          totalAgents: data.totalAgents ?? 0,
+          successfulRequests: data.successfulRequests ?? data.completedPings ?? 0,
+          failedRequests: data.failedRequests ?? 0,
+          avgResponseTime: data.avgResponseTime ?? 0,
+          activeZones: data.activeZones ?? CRITICAL_ZONES,
+          requestsByType: data.requestsByType ?? {
+            withdrawal: 0,
+            deposit: 0,
+            payment: 0,
+            info: 0,
+          },
+        }
+      }
+    } catch {
+      // Fallback below keeps the dashboard usable in offline demos.
+    }
+
     // Simulate fetching from backend
     await new Promise((resolve) => setTimeout(resolve, 300))
 

@@ -35,6 +35,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     { href: '/app/calculator', label: 'Calculadora' },
   ]
 
+  const navLinksWithHelp = [...navLinks, { href: '/app/help', label: 'Ajuda' }]
+
   return (
     <div className="min-h-screen bg-white">
       {/* Header */}
@@ -47,7 +49,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1">
-              {navLinks.map((link) => (
+              {navLinksWithHelp.map((link) => (
                 <Link key={link.href} href={link.href} className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-primary transition-colors">
                   {link.label}
                 </Link>
@@ -72,7 +74,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Mobile Navigation */}
           {mobileMenuOpen && (
             <nav className="md:hidden border-t border-gray-200 py-4 space-y-2">
-              {navLinks.map((link) => (
+              {navLinksWithHelp.map((link) => (
                 <Link key={link.href} href={link.href} className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100">
                   {link.label}
                 </Link>

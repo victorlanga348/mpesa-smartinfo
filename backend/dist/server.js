@@ -13,14 +13,37 @@ const pingHandler_1 = require("./sockets/pingHandler");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const server = http_1.default.createServer(app);
+const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:5173',
+    process.env.CLIENT_URL,
+].filter(Boolean);
+const isPrivateNetworkOrigin = (origin) => {
+    return /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+):\d+$/.test(origin);
+};
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: '*',
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin) || isPrivateNetworkOrigin(origin)) {
+                callback(null, true);
+                return;
+            }
+            callback(null, true);
+        },
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
     },
 });
 const PORT = process.env.PORT || 5000;
-app.use((0, cors_1.default)());
+const HOST = process.env.HOST || '0.0.0.0';
+app.use((0, cors_1.default)({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || isPrivateNetworkOrigin(origin)) {
+            callback(null, true);
+            return;
+        }
+        callback(null, true);
+    },
+}));
 app.use(express_1.default.json());
 // Expose io instance to express controllers
 app.set('io', io);
@@ -33,6 +56,6 @@ app.get('/health', (req, res) => {
 // Configure WebSockets
 (0, pingHandler_1.setupPingSockets)(io);
 // Start server
-server.listen(PORT, () => {
-    console.log(`Servidor M-Pesa SmartInfo a correr na porta ${PORT}`);
+server.listen(Number(PORT), HOST, () => {
+    console.log(`Servidor M-Pesa SmartInfo a correr em ${HOST}:${PORT}`);
 });

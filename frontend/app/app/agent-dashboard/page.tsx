@@ -1,13 +1,16 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { authService } from '@/lib/services/auth'
-import { agentService } from '@/lib/services/agent'
-import { Agent, Request } from '@/lib/types'
-import { CheckCircle, Clock, AlertCircle, DollarSign, Users, TrendingUp } from 'lucide-react'
+import { AlertCircle, CheckCircle, Clock, MapPin, Radio } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
+import { useGeolocation } from '@/hooks/use-geolocation'
+import { useSocket } from '@/hooks/use-socket'
+import { agentService } from '@/lib/services/agent'
+import { authService } from '@/lib/services/auth'
+import { authHeaders, getApiUrl } from '@/lib/socket'
+import { Agent, Request } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +20,28 @@ export default function AgentDashboardPage() {
   const [agent, setAgent] = useState<Agent | null>(null)
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
+  const [serviceEnabled, setServiceEnabled] = useState(false)
+  const { socket, state: socketState } = useSocket()
+
+  const handleAgentLocation = useCallback(async ({ latitude, longitude }: { latitude: number; longitude: number }) => {
+    if (!agent) return
+
+    try {
+      const updated = await agentService.updateAgentLocation(latitude, longitude)
+      if (updated) setAgent(updated)
+      socket.emit('agent:location-update', { agentId: agent.id, latitude, longitude })
+    } catch (error) {
+      console.error('Failed to update agent location:', error)
+    }
+  }, [agent, socket])
+
+  const { error: locationError } = useGeolocation({
+    enabled: serviceEnabled,
+    watch: true,
+    minDistanceMeters: 20,
+    minIntervalMs: 7000,
+    onLocation: handleAgentLocation,
+  })
 
   useEffect(() => {
     if (!user || user.role !== 'agent') {
@@ -26,224 +51,242 @@ export default function AgentDashboardPage() {
 
     const loadData = async () => {
       try {
-        // Find agent by user phone
         const agents = await agentService.getAgents()
-        const userAgent = agents.find((a) => a.phone === user.phone)
+        const currentAgent = agents.find((item) => item.id === user.id || item.phone === user.phone)
 
-        if (userAgent) {
-          setAgent(userAgent)
+        if (currentAgent) {
+          setAgent(currentAgent)
+          socket.emit('join:agent', currentAgent.id)
         }
 
-        // Load pending requests
-        const stored = localStorage.getItem('smartinfo_requests')
-        if (stored) {
-          try {
-            const allRequests = JSON.parse(stored)
-            setRequests(allRequests.filter((r: Request) => r.status === 'pending' || r.status === 'confirmed'))
-          } catch (e) {
-            console.error('Failed to parse requests', e)
-          }
+        const response = await fetch(`${getApiUrl()}/ping/active`, { headers: authHeaders() })
+        const activePings = await response.json()
+
+        if (Array.isArray(activePings)) {
+          setRequests(activePings.filter((ping: any) => ping.agentId === (currentAgent?.id || user.id)).map(mapPingToRequest))
         }
-      } catch (err) {
-        console.error('Failed to load data:', err)
+      } catch (error) {
+        console.error('Failed to load agent dashboard:', error)
       } finally {
         setLoading(false)
       }
     }
 
     loadData()
-  }, [user, router])
+  }, [router, socket, user])
+
+  useEffect(() => {
+    if (!agent) return
+
+    socket.emit('join:agent', agent.id)
+
+    const upsertRequest = (ping: any) => {
+      setRequests((current) => {
+        const next = mapPingToRequest(ping)
+        const exists = current.some((request) => request.id === next.id)
+        return exists ? current.map((request) => request.id === next.id ? { ...request, ...next } : request) : [next, ...current]
+      })
+    }
+    const removeRequest = (ping: any) => {
+      setRequests((current) => current.filter((request) => request.id !== ping.id))
+    }
+
+    socket.on('ping:created', upsertRequest)
+    socket.on('ping:accepted', upsertRequest)
+    socket.on('ping:on-the-way', upsertRequest)
+    socket.on('ping:arrived', removeRequest)
+    socket.on('ping:expired', removeRequest)
+
+    return () => {
+      socket.off('ping:created', upsertRequest)
+      socket.off('ping:accepted', upsertRequest)
+      socket.off('ping:on-the-way', upsertRequest)
+      socket.off('ping:arrived', removeRequest)
+      socket.off('ping:expired', removeRequest)
+    }
+  }, [agent, socket])
 
   const toggleStatus = async (newStatus: 'online' | 'offline' | 'busy') => {
     if (!agent) return
 
+    setServiceEnabled(newStatus !== 'offline')
+
     try {
       const updated = await agentService.updateAgentStatus(agent.id, newStatus)
-      if (updated) {
-        setAgent(updated)
-      }
-    } catch (err) {
-      console.error('Failed to update status:', err)
+      if (updated) setAgent(updated)
+      socket.emit('agent:status-update', {
+        agentId: agent.id,
+        status: newStatus === 'online' ? 'ONLINE' : newStatus === 'busy' ? 'ON_MY_WAY' : 'OFFLINE',
+      })
+    } catch (error) {
+      console.error('Failed to update agent status:', error)
+    }
+  }
+
+  const acceptRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`${getApiUrl()}/ping/${requestId}/accept`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      })
+      const ping = await response.json()
+      if (!response.ok) throw new Error(ping.error || 'Erro ao aceitar pedido')
+      setRequests((current) => current.map((request) => request.id === requestId ? mapPingToRequest(ping) : request))
+    } catch (error) {
+      console.error('Failed to accept request:', error)
     }
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Carregando...</p>
-      </div>
-    )
+    return <PageMessage text="A carregar painel do agente..." />
   }
 
   if (!agent) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Painel do Agente</h1>
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-800">Seu perfil de agente não foi encontrado</p>
+        <h1 className="text-2xl font-bold text-gray-900">Painel do agente</h1>
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+          <p className="text-red-800">Perfil de agente nao encontrado. Confirme o telefone usado no login.</p>
         </div>
       </div>
     )
   }
 
-  const confirmedRequests = requests.filter((r) => r.status === 'confirmed').length
-  const pendingRequests = requests.filter((r) => r.status === 'pending').length
+  const pendingRequests = requests.filter((request) => request.status === 'pending').length
+  const clientsOnWay = requests.filter((request) => request.status === 'confirmed').length
 
   return (
     <div className="space-y-8">
-      {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Meu Painel</h1>
-        <p className="text-gray-600 mt-2">Gerencie seus clientes e solicitações</p>
+        <h1 className="text-3xl font-bold text-gray-900">Painel do agente</h1>
+        <p className="mt-2 text-gray-600">Controle o estado de servico e responda aos pedidos pendentes.</p>
       </div>
 
-      {/* Status Section */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Seu Status</h2>
-        <div className="flex items-center justify-between">
+      <section className="rounded-lg border border-gray-200 bg-white p-6">
+        <h2 className="mb-4 text-xl font-semibold text-gray-900">Estado operacional</h2>
+        <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50 p-3 text-sm text-gray-700">
+          Tempo real: <strong>{socketState === 'online' ? 'online' : socketState === 'reconnecting' ? 'reconectando' : 'offline'}</strong>
+          {locationError && <p className="mt-1 text-red-700">{locationError}</p>}
+        </div>
+
+        <div className="flex items-center justify-between gap-4">
           <div>
             <h3 className="text-2xl font-bold text-gray-900">{agent.name}</h3>
             <p className="text-gray-600">{agent.location}</p>
-            <p className="text-sm text-gray-500 mt-2">Tempo médio de resposta: {agent.responseTime}s</p>
+            <p className="mt-2 text-sm text-gray-500">A localizacao actualiza enquanto estiver em servico.</p>
           </div>
           <StatusBadge status={agent.status as any} />
         </div>
 
-        {/* Status Buttons */}
-        <div className="flex gap-3 mt-6">
-          <Button
-            onClick={() => toggleStatus('online')}
-            variant={agent.status === 'online' ? 'default' : 'outline'}
-            className={agent.status === 'online' ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
-          >
-            Online
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Button onClick={() => toggleStatus('online')} variant={agent.status === 'online' ? 'default' : 'outline'} className={agent.status === 'online' ? 'bg-[#16A34A] text-white hover:bg-green-700' : ''}>
+            Estou em servico
           </Button>
-          <Button
-            onClick={() => toggleStatus('busy')}
-            variant={agent.status === 'busy' ? 'default' : 'outline'}
-            className={agent.status === 'busy' ? 'bg-yellow-600 hover:bg-yellow-700 text-white' : ''}
-          >
-            Ocupado
+          <Button onClick={() => toggleStatus('busy')} variant={agent.status === 'busy' ? 'default' : 'outline'} className={agent.status === 'busy' ? 'bg-[#F59E0B] text-white hover:bg-yellow-600' : ''}>
+            Com cliente
           </Button>
-          <Button
-            onClick={() => toggleStatus('offline')}
-            variant={agent.status === 'offline' ? 'default' : 'outline'}
-            className={agent.status === 'offline' ? 'bg-gray-600 hover:bg-gray-700 text-white' : ''}
-          >
+          <Button onClick={() => toggleStatus('offline')} variant={agent.status === 'offline' ? 'default' : 'outline'} className={agent.status === 'offline' ? 'bg-[#9CA3AF] text-white hover:bg-gray-600' : ''}>
             Offline
           </Button>
         </div>
-      </div>
+      </section>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">Saldo Disponível</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">
-                {agent.balance?.toLocaleString('pt-MZ') || '0'} MZN
-              </p>
-            </div>
-            <DollarSign className="w-8 h-8 text-primary/30" />
-          </div>
-        </div>
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <MetricCard icon={Radio} label="Estado" value={agent.status === 'online' ? 'Em servico' : agent.status === 'busy' ? 'Com cliente' : 'Offline'} />
+        <MetricCard icon={CheckCircle} label="Clientes a caminho" value={clientsOnWay.toString()} />
+        <MetricCard icon={Clock} label="Pedidos pendentes" value={pendingRequests.toString()} />
+        <MetricCard icon={MapPin} label="Localizacao" value={agent.latitude && agent.longitude ? 'Activa' : 'Por definir'} />
+      </section>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">Solicitações Confirmadas</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{confirmedRequests}</p>
-            </div>
-            <CheckCircle className="w-8 h-8 text-green-500/30" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">Solicitações Pendentes</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{pendingRequests}</p>
-            </div>
-            <Clock className="w-8 h-8 text-yellow-500/30" />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-gray-600 text-sm">Total de Clientes</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{agent.totalRequests}</p>
-            </div>
-            <Users className="w-8 h-8 text-blue-500/30" />
-          </div>
-        </div>
-      </div>
-
-      {/* Pending Requests */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Solicitações Pendentes</h2>
+      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="border-b border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900">Pedidos pendentes</h2>
         </div>
 
         {requests.length === 0 ? (
           <div className="p-8 text-center">
-            <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-600">Nenhuma solicitação pendente</p>
+            <AlertCircle className="mx-auto mb-3 size-12 text-gray-300" />
+            <p className="text-gray-600">Ainda nao existem pedidos para este agente.</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {requests.map((req) => (
-              <div key={req.id} className="p-4 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center justify-between">
+            {requests.map((request) => (
+              <div key={request.id} className="p-4">
+                <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="font-medium text-gray-900">
-                      {req.type === 'withdrawal'
-                        ? 'Levantamento'
-                        : req.type === 'deposit'
-                          ? 'Depósito'
-                          : req.type === 'payment'
-                            ? 'Pagamento'
-                            : 'Informação'}
-                    </p>
-                    {req.amount && (
-                      <p className="text-sm text-gray-600">Valor: {req.amount.toLocaleString('pt-MZ')} MZN</p>
-                    )}
+                    <p className="font-medium text-gray-900">{operationLabel(request.type)}</p>
+                    {request.amount && <p className="text-sm text-gray-600">Valor solicitado: {request.amount.toLocaleString('pt-MZ')} MT</p>}
                   </div>
-                  <StatusBadge status={req.status as any} />
+                  <StatusBadge status={request.status as any} />
                 </div>
+                {request.status === 'pending' && (
+                  <Button onClick={() => acceptRequest(request.id)} className="mt-3 bg-[#16A34A] text-white hover:bg-green-700">
+                    Aceitar pedido
+                  </Button>
+                )}
+                {request.status === 'confirmed' && (
+                  <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm font-medium text-blue-800">
+                    Cliente confirmou que esta a caminho. Quando tocar em Ja cheguei, sai automaticamente desta lista.
+                  </p>
+                )}
               </div>
             ))}
           </div>
         )}
-      </div>
+      </section>
 
-      {/* Performance */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">Performance</h2>
-          <TrendingUp className="w-5 h-5 text-primary" />
+      <section className="rounded-lg border border-gray-200 bg-white p-6">
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-gray-900">Actividade em tempo real</h2>
+          <Radio className="size-5 text-[#E60000]" />
         </div>
-        <div className="space-y-3">
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-medium text-gray-700">Avaliação</p>
-              <p className="text-sm font-semibold text-gray-900">{agent.rating.toFixed(1)} / 5.0</p>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-primary h-2 rounded-full"
-                style={{ width: `${(agent.rating / 5) * 100}%` }}
-              />
-            </div>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600">
-              {agent.totalRequests} transações atendidas com sucesso
-            </p>
-          </div>
+        <p className="text-sm text-gray-600">
+          Os dados serao apresentados quando houver actividade suficiente. O SmartInfo nao mostra saldo nem liquidez total do agente.
+        </p>
+      </section>
+    </div>
+  )
+}
+
+function MetricCard({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-gray-600">{label}</p>
+          <p className="mt-1 text-2xl font-bold text-gray-900">{value}</p>
         </div>
+        <Icon className="size-8 text-[#E60000]/30" />
       </div>
     </div>
   )
+}
+
+function PageMessage({ text }: { text: string }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <p>{text}</p>
+    </div>
+  )
+}
+
+function operationLabel(type: Request['type']) {
+  if (type === 'withdrawal') return 'Levantamento'
+  if (type === 'deposit') return 'Deposito'
+  if (type === 'payment') return 'Pagamento'
+  return 'Informacao'
+}
+
+function mapPingToRequest(ping: any): Request {
+  const status = String(ping.status || '').toUpperCase()
+
+  return {
+    id: ping.id,
+    customerId: ping.userId,
+    agentId: ping.agentId,
+    type: ping.operationType || 'withdrawal',
+    amount: ping.amount,
+    status: status === 'ACCEPTED' || status === 'ON_MY_WAY' ? 'confirmed' : 'pending',
+    createdAt: ping.createdAt ? new Date(ping.createdAt) : new Date(),
+  } as Request
 }

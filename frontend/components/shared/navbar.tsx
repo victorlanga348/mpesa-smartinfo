@@ -14,10 +14,15 @@ export function Navbar() {
     { href: '#como-usar', label: 'Como usar' },
     { href: '#poupanca', label: 'Poupanca' },
     { href: '#agentes', label: 'Agentes' },
-    { href: '#ajuda', label: 'Ajuda' },
+    { href: '/help', label: 'Ajuda' },
   ]
 
   const handleSectionClick = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (!href.startsWith('#')) {
+      setIsOpen(false)
+      return
+    }
+
     event.preventDefault()
     setActiveLink(href)
     setIsOpen(false)
@@ -42,7 +47,7 @@ export function Navbar() {
 
           <div className="hidden items-center rounded-full border border-gray-200 bg-gray-50/80 p-1 md:flex">
             {navLinks.map((link) => (
-              <a
+              <Link
                 key={link.href}
                 href={link.href}
                 onClick={(event) => handleSectionClick(event, link.href)}
@@ -51,7 +56,7 @@ export function Navbar() {
                 }`}
               >
                 {link.label}
-              </a>
+              </Link>
             ))}
           </div>
 
@@ -84,7 +89,7 @@ export function Navbar() {
             >
               <div className="mb-4 rounded-lg border border-gray-200 bg-white p-2 shadow-xl">
                 {navLinks.map((link) => (
-                  <a
+                  <Link
                     key={link.href}
                     href={link.href}
                     className={`block rounded-md px-4 py-3 text-sm font-semibold transition-all duration-300 hover:bg-red-50 hover:text-primary ${
@@ -93,7 +98,7 @@ export function Navbar() {
                     onClick={(event) => handleSectionClick(event, link.href)}
                   >
                     {link.label}
-                  </a>
+                  </Link>
                 ))}
                 <div className="mt-2 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3">
                   <Button asChild variant="outline" className="rounded-full border-red-200 text-primary">

@@ -4,6 +4,15 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { AgentStatus } from '../types';
 
 export class AgentController {
+  static async list(req: Request, res: Response) {
+    try {
+      const agents = await AgentService.listAgents();
+      return res.status(200).json(agents);
+    } catch (error: any) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
+
   static async register(req: Request, res: Response) {
     try {
       const { name, phone, password } = req.body;
@@ -43,6 +52,14 @@ export class AgentController {
       }
 
       const updated = await AgentService.updateStatus(agentId, status as AgentStatus);
+      const io = req.app.get('io');
+      if (io) {
+        const eventName = status === AgentStatus.OFFLINE ? 'agent:offline' : 'agent:online';
+        io.to('map').emit(eventName, updated);
+        io.to('map').emit('agent:status-updated', updated);
+        io.to('admin').emit('admin:metrics-updated');
+        io.emit('agents:list-updated', { reason: 'status-updated', agent: updated });
+      }
       return res.status(200).json(updated);
     } catch (error: any) {
       return res.status(400).json({ error: error.message });
@@ -60,6 +77,12 @@ export class AgentController {
       }
 
       const updated = await AgentService.updateLocation(agentId, Number(latitude), Number(longitude));
+      const io = req.app.get('io');
+      if (io) {
+        io.to('map').emit('agent:location-updated', updated);
+        io.to('admin').emit('admin:metrics-updated');
+        io.emit('agents:list-updated', { reason: 'location-updated', agent: updated });
+      }
       return res.status(200).json(updated);
     } catch (error: any) {
       return res.status(400).json({ error: error.message });

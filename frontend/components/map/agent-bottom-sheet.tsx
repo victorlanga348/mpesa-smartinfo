@@ -6,6 +6,7 @@ import { X, MessageCircle, MapPin, Star, Zap } from 'lucide-react'
 import { Agent, Request } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { agentService, requestService, reservationService } from '@/lib/services'
+import { useSocket } from '@/hooks/use-socket'
 
 export function AgentBottomSheet({
   agent,
@@ -27,6 +28,7 @@ export function AgentBottomSheet({
   const [currentRequest, setCurrentRequest] = useState<any>(null)
   const [rating, setRating] = useState(5)
   const [alreadyRated, setAlreadyRated] = useState(false)
+  const { socket } = useSocket()
 
   const getUser = () => JSON.parse(localStorage.getItem('smartinfo_user') || '{}')
 
@@ -86,6 +88,15 @@ export function AgentBottomSheet({
     return nextRequest
   }
 
+  const normalizeRequestStatus = (status?: string) => {
+    const normalized = String(status || '').toUpperCase()
+    if (normalized === 'ACCEPTED') return 'accepted'
+    if (normalized === 'ON_MY_WAY') return 'customer_on_way'
+    if (normalized === 'COMPLETED') return 'completed'
+    if (normalized === 'EXPIRED') return 'rejected'
+    return 'pending'
+  }
+
   const updateLocalRequest = (id: string, changes: Record<string, any>) => {
     const stored = localStorage.getItem('smartinfo_requests')
     const requests = stored ? JSON.parse(stored) : []
@@ -117,12 +128,47 @@ export function AgentBottomSheet({
     return () => window.clearInterval(timer)
   }, [currentRequest?.id, step])
 
+  useEffect(() => {
+    const user = getUser()
+    if (user?.id) socket.emit('join:client', user.id)
+
+    const handleAccepted = (ping: any) => {
+      if (!currentRequest?.id || ping.id !== currentRequest.id) return
+      const updated = updateLocalRequest(currentRequest.id, { status: 'accepted' })
+      setCurrentRequest(updated || { ...currentRequest, status: 'accepted' })
+    }
+
+    const handleRejected = (ping: any) => {
+      if (!currentRequest?.id || ping.id !== currentRequest.id) return
+      const updated = updateLocalRequest(currentRequest.id, { status: 'rejected' })
+      setCurrentRequest(updated || { ...currentRequest, status: 'rejected' })
+    }
+
+    socket.on('ping:accepted', handleAccepted)
+    socket.on('ping:rejected', handleRejected)
+    socket.on('ping:expired', handleRejected)
+
+    return () => {
+      socket.off('ping:accepted', handleAccepted)
+      socket.off('ping:rejected', handleRejected)
+      socket.off('ping:expired', handleRejected)
+    }
+  }, [currentRequest, socket])
+
   const handlePingAgent = async () => {
     if (!agent) return
 
     setLoading(true)
     try {
-      const result = await agentService.pingAgent(agent.id, amount, operationType, agent.latitude, agent.longitude)
+      const storedLocation = localStorage.getItem('smartinfo_client_location')
+      const clientLocation = storedLocation ? JSON.parse(storedLocation) : null
+      const result = await agentService.pingAgent(
+        agent.id,
+        amount,
+        operationType,
+        clientLocation?.latitude ?? agent.latitude,
+        clientLocation?.longitude ?? agent.longitude,
+      )
       const localRequest = saveLocalRequest(result)
       setCurrentRequest(localRequest)
       setWaitMinutes(10)
@@ -174,15 +220,25 @@ export function AgentBottomSheet({
   }
 
   const handleArrived = () => {
-    if (currentRequest?.id) {
-      removeLocalRequest(currentRequest.id)
+    const completeArrival = async () => {
+      if (currentRequest?.id) {
+        await requestService.updatePingStatus(currentRequest.id, 'COMPLETED')
+        removeLocalRequest(currentRequest.id)
+      }
+      setAlreadyRated(agent ? hasRatedAgent(agent.id) : false)
+      setStep('rating')
     }
-    setAlreadyRated(agent ? hasRatedAgent(agent.id) : false)
-    setStep('rating')
+
+    completeArrival().catch(() => {
+      if (currentRequest?.id) removeLocalRequest(currentRequest.id)
+      setAlreadyRated(agent ? hasRatedAgent(agent.id) : false)
+      setStep('rating')
+    })
   }
 
   const handleConfirmComing = () => {
     if (!currentRequest?.id) return
+    requestService.updatePingStatus(currentRequest.id, 'ON_MY_WAY').catch(() => null)
     const updated = updateLocalRequest(currentRequest.id, { status: 'customer_on_way' })
     setCurrentRequest(updated || { ...currentRequest, status: 'customer_on_way' })
   }

@@ -1,9 +1,10 @@
 import axios from 'axios'
 import { Agent, Request, Message, Reservation, AdminMetrics } from '@/lib/types'
 import { MOCK_AGENTS, CRITICAL_ZONES } from '@/lib/mock-data'
+import { getApiUrl } from '@/lib/socket'
 
 const API = axios.create({
-  baseURL: 'http://localhost:5000/api',
+  baseURL: getApiUrl(),
 })
 
 // Inject token to requests if present
@@ -190,7 +191,7 @@ export const chatService = {
 export const reservationService = {
   async createReservation(customerId: string, agentId: string, requestId: string, eta: number) {
     try {
-      const response = await API.put(`/ping/${requestId}/status`, { status: 'ON_MY_WAY' })
+      const response = await API.get(`/ping/${requestId}`)
       return {
         id: response.data.id,
         requestId: response.data.id,
@@ -340,8 +341,8 @@ export const authService = {
   async loginAgent(nameOrPhone: string, code: string) {
     try {
       const response = await API.post('/agent/login', { phone: nameOrPhone, password: code })
-      const { token, user } = response.data
-      localStorage.setItem('smartinfo_user', JSON.stringify({ ...user, token, role: 'agent', type: 'agent' }))
+      const { token, agent } = response.data
+      localStorage.setItem('smartinfo_user', JSON.stringify({ ...agent, token, role: 'agent', type: 'agent' }))
       return response.data
     } catch {
       const user = {

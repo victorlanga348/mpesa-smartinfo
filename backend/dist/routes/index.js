@@ -16,6 +16,7 @@ router.get('/user/pings', auth_1.authMiddleware, UserController_1.UserController
 // Agent routes (Agentes M-Pesa)
 router.post('/agent/register', AgentController_1.AgentController.register);
 router.post('/agent/login', AgentController_1.AgentController.login);
+router.get('/agent', AgentController_1.AgentController.list);
 router.get('/agent/profile', auth_1.authMiddleware, AgentController_1.AgentController.getProfile);
 router.put('/agent/status', auth_1.authMiddleware, AgentController_1.AgentController.updateStatus);
 router.put('/agent/location', auth_1.authMiddleware, AgentController_1.AgentController.updateLocation);

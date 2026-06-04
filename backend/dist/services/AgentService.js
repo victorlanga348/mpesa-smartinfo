@@ -35,11 +35,6 @@ class AgentService {
         if (!isValid) {
             throw new Error('Telefone ou palavra-passe incorreta.');
         }
-        // Set online status on login
-        await prisma_1.prisma.agent.update({
-            where: { id: agent.id },
-            data: { status: types_1.AgentStatus.ONLINE },
-        });
         const token = jsonwebtoken_1.default.sign({ id: agent.id, name: agent.name, phone: agent.phone }, JWT_SECRET, { expiresIn: '24h' });
         return {
             token,
@@ -47,9 +42,27 @@ class AgentService {
                 id: agent.id,
                 name: agent.name,
                 phone: agent.phone,
-                status: types_1.AgentStatus.ONLINE,
+                status: agent.status,
+                latitude: agent.latitude,
+                longitude: agent.longitude,
+                reference: agent.reference,
             },
         };
+    }
+    static async listAgents() {
+        return prisma_1.prisma.agent.findMany({
+            select: {
+                id: true,
+                name: true,
+                phone: true,
+                status: true,
+                latitude: true,
+                longitude: true,
+                reference: true,
+                updatedAt: true,
+            },
+            orderBy: { updatedAt: 'desc' },
+        });
     }
     static async updateStatus(agentId, status) {
         return prisma_1.prisma.agent.update({
@@ -60,6 +73,9 @@ class AgentService {
                 name: true,
                 phone: true,
                 status: true,
+                latitude: true,
+                longitude: true,
+                reference: true,
             },
         });
     }
@@ -74,6 +90,7 @@ class AgentService {
                 status: true,
                 latitude: true,
                 longitude: true,
+                reference: true,
             },
         });
     }

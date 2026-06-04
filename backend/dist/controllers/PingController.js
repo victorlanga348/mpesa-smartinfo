@@ -16,8 +16,8 @@ class PingController {
             const ping = await PingService_1.PingService.createPing(userId, Number(latitude), Number(longitude), agentId, Number(amount), operationType);
             const io = req.app.get('io');
             if (io) {
-                // Emit to the specific agent room or everyone
-                io.emit('newPing', ping);
+                io.to(`agent:${agentId}`).emit('ping:created', ping);
+                io.to('admin').emit('admin:metrics-updated');
             }
             return res.status(201).json(ping);
         }
@@ -34,7 +34,9 @@ class PingController {
             const updatedPing = await PingService_1.PingService.acceptPing(pingId, agentId);
             const io = req.app.get('io');
             if (io) {
-                io.emit('pingAccepted', updatedPing);
+                io.to(`client:${updatedPing.userId}`).emit('ping:accepted', updatedPing);
+                io.to(`agent:${agentId}`).emit('ping:accepted', updatedPing);
+                io.to('admin').emit('admin:metrics-updated');
             }
             return res.status(200).json(updatedPing);
         }
@@ -55,7 +57,24 @@ class PingController {
             const updatedPing = await PingService_1.PingService.updatePingStatus(pingId, status, agentId);
             const io = req.app.get('io');
             if (io) {
-                io.emit('pingStatusUpdated', updatedPing);
+                const eventByStatus = {
+                    [types_1.PingStatus.ON_MY_WAY]: 'ping:on-the-way',
+                    [types_1.PingStatus.COMPLETED]: 'ping:arrived',
+                    [types_1.PingStatus.EXPIRED]: 'ping:expired',
+                    [types_1.PingStatus.ACCEPTED]: 'ping:accepted',
+                };
+                const eventName = eventByStatus[status] || 'ping:status-updated';
+                io.to(`client:${updatedPing.userId}`).emit(eventName, updatedPing);
+                io.to(`agent:${agentId}`).emit(eventName, updatedPing);
+                if (status === types_1.PingStatus.ON_MY_WAY) {
+                    io.to(`client:${updatedPing.userId}`).emit('reservation:created', updatedPing);
+                    io.to(`agent:${agentId}`).emit('reservation:created', updatedPing);
+                }
+                if (status === types_1.PingStatus.EXPIRED) {
+                    io.to(`client:${updatedPing.userId}`).emit('reservation:expired', updatedPing);
+                    io.to(`agent:${agentId}`).emit('reservation:expired', updatedPing);
+                }
+                io.to('admin').emit('admin:metrics-updated');
             }
             return res.status(200).json(updatedPing);
         }

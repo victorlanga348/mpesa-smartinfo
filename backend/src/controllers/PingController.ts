@@ -25,8 +25,8 @@ export class PingController {
       
       const io = req.app.get('io');
       if (io) {
-        // Emit to the specific agent room or everyone
-        io.emit('newPing', ping);
+        io.to(`agent:${agentId}`).emit('ping:created', ping);
+        io.to('admin').emit('admin:metrics-updated');
       }
 
       return res.status(201).json(ping);
@@ -45,7 +45,9 @@ export class PingController {
 
       const io = req.app.get('io');
       if (io) {
-        io.emit('pingAccepted', updatedPing);
+        io.to(`client:${updatedPing.userId}`).emit('ping:accepted', updatedPing);
+        io.to(`agent:${agentId}`).emit('ping:accepted', updatedPing);
+        io.to('admin').emit('admin:metrics-updated');
       }
 
       return res.status(200).json(updatedPing);
@@ -70,7 +72,28 @@ export class PingController {
 
       const io = req.app.get('io');
       if (io) {
-        io.emit('pingStatusUpdated', updatedPing);
+        const eventByStatus: Record<string, string> = {
+          [PingStatus.ON_MY_WAY]: 'ping:on-the-way',
+          [PingStatus.COMPLETED]: 'ping:arrived',
+          [PingStatus.EXPIRED]: 'ping:expired',
+          [PingStatus.ACCEPTED]: 'ping:accepted',
+        };
+        const eventName = eventByStatus[status] || 'ping:status-updated';
+
+        io.to(`client:${updatedPing.userId}`).emit(eventName, updatedPing);
+        io.to(`agent:${agentId}`).emit(eventName, updatedPing);
+
+        if (status === PingStatus.ON_MY_WAY) {
+          io.to(`client:${updatedPing.userId}`).emit('reservation:created', updatedPing);
+          io.to(`agent:${agentId}`).emit('reservation:created', updatedPing);
+        }
+
+        if (status === PingStatus.EXPIRED) {
+          io.to(`client:${updatedPing.userId}`).emit('reservation:expired', updatedPing);
+          io.to(`agent:${agentId}`).emit('reservation:expired', updatedPing);
+        }
+
+        io.to('admin').emit('admin:metrics-updated');
       }
 
       return res.status(200).json(updatedPing);

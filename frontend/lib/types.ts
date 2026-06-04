@@ -22,6 +22,7 @@ export interface Agent {
   rating: number
   responseTime: number // in seconds
   totalRequests: number
+  distanceKm?: number
 }
 
 export interface Request {

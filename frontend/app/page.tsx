@@ -59,7 +59,7 @@ export default function Home() {
             <p className="mb-2 text-sm font-black uppercase tracking-wide text-primary">Calculadora de poupanca</p>
             <h2 className="text-3xl font-black text-gray-900 sm:text-4xl">Veja se vale a pena levantar dinheiro.</h2>
             <p className="mt-3 text-base leading-relaxed text-gray-600">
-              A ferramenta mostra o custo do transporte, o tempo perdido e uma taxa estimada. Assim o cliente entende se pagar digitalmente pode ser melhor.
+              A ferramenta ajuda a comparar deslocação, tempo de espera e alternativa digital antes de sair.
             </p>
             <Button asChild className="mt-6 h-12 rounded-full bg-primary px-7 font-black text-white hover:bg-red-700">
               <Link href="/map">Testar no mapa</Link>
@@ -73,21 +73,21 @@ export default function Home() {
               </div>
               <div>
                 <h3 className="text-xl font-black text-gray-900">Quanto pode poupar hoje?</h3>
-                <p className="text-sm text-gray-600">Exemplo simples para qualquer pessoa entender.</p>
+                <p className="text-sm text-gray-600">A análise aparece depois de informar distância e tentativa de atendimento.</p>
               </div>
             </div>
             <div className="grid gap-3 text-sm">
               <div className="flex items-center justify-between rounded-lg bg-red-50 p-3">
                 <span className="font-bold text-gray-700">Levantar dinheiro</span>
-                <span className="font-black text-primary">30 MT + tempo</span>
+                <span className="font-black text-primary">Depende da rota</span>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-green-50 p-3">
                 <span className="font-bold text-gray-700">Pagar digitalmente</span>
-                <span className="font-black text-green-700">0 MT</span>
+                <span className="font-black text-green-700">Comparar antes</span>
               </div>
               <div className="rounded-lg bg-green-600 p-4 text-white">
                 <p className="text-sm font-bold text-white/85">Resultado</p>
-                <p className="text-2xl font-black">Pode poupar 30 MT</p>
+                <p className="text-lg font-black">Os dados aparecem quando fizer a simulação.</p>
               </div>
             </div>
           </div>
@@ -122,7 +122,7 @@ export default function Home() {
               </p>
             </div>
             <Button asChild className="h-12 rounded-full bg-primary px-7 font-black text-white hover:bg-red-700">
-              <Link href="/map">Procurar agente</Link>
+              <Link href="/help">Abrir ajuda</Link>
             </Button>
           </div>
         </div>

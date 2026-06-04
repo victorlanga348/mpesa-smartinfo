@@ -117,20 +117,20 @@ export default function MapPage() {
         </div>
       </motion.header>
 
-      <div className="mx-auto grid w-full max-w-7xl gap-5 px-3 py-4 sm:px-4 lg:grid-cols-[minmax(0,1fr)_420px] lg:items-start lg:px-6">
-        <section className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div className="mx-auto grid w-full max-w-7xl gap-5 px-3 py-4 sm:px-4 lg:h-[calc(100vh-73px)] lg:grid-cols-[minmax(0,1fr)_400px] lg:items-stretch lg:overflow-hidden lg:px-6">
+        <section className="min-h-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-4 py-3">
             <h2 className="text-base font-black text-gray-900 sm:text-lg">Mapa de agentes</h2>
             <p className="text-xs leading-relaxed text-gray-600 sm:text-sm">
               Pesquise uma zona, toque num agente e aguarde a confirmacao antes de sair.
             </p>
           </div>
-          <div className="relative h-[58vh] min-h-[420px] w-full overflow-hidden lg:h-[calc(100vh-190px)] lg:min-h-[620px]">
+          <div className="relative h-[58vh] min-h-[420px] w-full overflow-hidden lg:h-[calc(100%-73px)] lg:min-h-0">
             <MapView onAgentSelect={handleAgentSelect} />
           </div>
         </section>
 
-        <aside className="space-y-4 lg:sticky lg:top-24">
+        <aside className="space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}

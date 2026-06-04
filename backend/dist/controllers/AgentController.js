@@ -4,6 +4,15 @@ exports.AgentController = void 0;
 const AgentService_1 = require("../services/AgentService");
 const types_1 = require("../types");
 class AgentController {
+    static async list(req, res) {
+        try {
+            const agents = await AgentService_1.AgentService.listAgents();
+            return res.status(200).json(agents);
+        }
+        catch (error) {
+            return res.status(400).json({ error: error.message });
+        }
+    }
     static async register(req, res) {
         try {
             const { name, phone, password } = req.body;
@@ -40,6 +49,14 @@ class AgentController {
                 return res.status(400).json({ error: 'Status inválido.' });
             }
             const updated = await AgentService_1.AgentService.updateStatus(agentId, status);
+            const io = req.app.get('io');
+            if (io) {
+                const eventName = status === types_1.AgentStatus.OFFLINE ? 'agent:offline' : 'agent:online';
+                io.to('map').emit(eventName, updated);
+                io.to('map').emit('agent:status-updated', updated);
+                io.to('admin').emit('admin:metrics-updated');
+                io.emit('agents:list-updated', { reason: 'status-updated', agent: updated });
+            }
             return res.status(200).json(updated);
         }
         catch (error) {
@@ -56,6 +73,12 @@ class AgentController {
                 return res.status(400).json({ error: 'Latitude e longitude são obrigatórias.' });
             }
             const updated = await AgentService_1.AgentService.updateLocation(agentId, Number(latitude), Number(longitude));
+            const io = req.app.get('io');
+            if (io) {
+                io.to('map').emit('agent:location-updated', updated);
+                io.to('admin').emit('admin:metrics-updated');
+                io.emit('agents:list-updated', { reason: 'location-updated', agent: updated });
+            }
             return res.status(200).json(updated);
         }
         catch (error) {
