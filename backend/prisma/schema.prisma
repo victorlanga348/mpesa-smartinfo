@@ -1,0 +1,61 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  phone     String?
+  password  String?
+  latitude  Float?
+  longitude Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  pings     Ping[]
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Agent {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  password  String
+  status    String   // ONLINE, OFFLINE, ON_MY_WAY
+  latitude  Float?
+  longitude Float?
+  reference String?  // Reference location (e.g. "Ao lado da banca azul")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  pings     Ping[]
+}
+
+model Ping {
+  id                 String    @id @default(uuid())
+  status             String    // PENDING, ACCEPTED, ON_MY_WAY, EXPIRED, COMPLETED
+  amount             Float?
+  operationType      String?   // withdrawal, deposit
+  userId             String
+  user               User      @relation(fields: [userId], references: [id])
+  agentId            String?
+  agent              Agent?    @relation(fields: [agentId], references: [id])
+  reservationToken   String?
+  reservationExpires DateTime?
+  latitude           Float
+  longitude          Float
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}

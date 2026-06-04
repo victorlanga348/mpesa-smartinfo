@@ -1,0 +1,178 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'leaflet/dist/leaflet.css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #FFFFFF;
+  --foreground: #4A4A4A;
+  --card: #FFFFFF;
+  --card-foreground: #4A4A4A;
+  --popover: #FFFFFF;
+  --popover-foreground: #4A4A4A;
+  --primary: #E60000;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F5F5F5;
+  --secondary-foreground: #4A4A4A;
+  --muted: #E8E8E8;
+  --muted-foreground: #7A7A7A;
+  --accent: #16A34A;
+  --accent-foreground: #FFFFFF;
+  --success: #16A34A;
+  --warning: #F59E0B;
+  --info: #2563EB;
+  --destructive: #E60000;
+  --destructive-foreground: #FFFFFF;
+  --border: #E0E0E0;
+  --input: #F9F9F9;
+  --ring: #E60000;
+  --chart-1: #E60000;
+  --chart-2: #2563EB;
+  --chart-3: #16A34A;
+  --chart-4: #F59E0B;
+  --chart-5: #7C3AED;
+  --temporary-agent: #7C3AED;
+  --radius: 0.625rem;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #4A4A4A;
+  --sidebar-primary: #E60000;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #16A34A;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #E0E0E0;
+  --sidebar-ring: #E60000;
+}
+
+.dark {
+  --background: #111111;
+  --foreground: #FFFFFF;
+  --card: #1A1A1A;
+  --card-foreground: #FFFFFF;
+  --popover: #1A1A1A;
+  --popover-foreground: #FFFFFF;
+  --primary: #E60000;
+  --primary-foreground: #FFFFFF;
+  --secondary: #242424;
+  --secondary-foreground: #FFFFFF;
+  --muted: #2D2D2D;
+  --muted-foreground: #C7C7C7;
+  --accent: #16A34A;
+  --accent-foreground: #FFFFFF;
+  --destructive: #E60000;
+  --destructive-foreground: #FFFFFF;
+  --border: #333333;
+  --input: #222222;
+  --ring: #E60000;
+  --chart-1: #E60000;
+  --chart-2: #2563EB;
+  --chart-3: #16A34A;
+  --chart-4: #F59E0B;
+  --chart-5: #7C3AED;
+  --sidebar: #1A1A1A;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #E60000;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #16A34A;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #333333;
+  --sidebar-ring: #E60000;
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Geist Fallback';
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  * {
+    @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(74, 74, 74, 0.22) transparent;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  section[id] {
+    scroll-margin-top: 88px;
+  }
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(74, 74, 74, 0.22);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(230, 0, 0, 0.38);
+}
+
+.leaflet-container {
+  z-index: 0;
+}
+
+.leaflet-pane,
+.leaflet-control,
+.leaflet-top,
+.leaflet-bottom {
+  z-index: 0 !important;
+}
+
+@keyframes marker-bounce {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  45% {
+    transform: translateY(-7px) scale(1.08);
+  }
+}
