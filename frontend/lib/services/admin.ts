@@ -1,12 +1,12 @@
 import { AdminMetrics, Request } from '../types'
 import { MOCK_AGENTS, CRITICAL_ZONES } from '../mock-data'
-import { getApiUrl } from '@/lib/socket'
+import { authHeaders, getApiUrl } from '@/lib/socket'
 
 export const adminService = {
   // Get admin metrics
   async getMetrics(): Promise<AdminMetrics> {
     try {
-      const response = await fetch(`${getApiUrl()}/admin/stats`)
+      const response = await fetch(`${getApiUrl()}/admin/stats`, { headers: authHeaders() })
       const data = await response.json()
 
       if (response.ok) {

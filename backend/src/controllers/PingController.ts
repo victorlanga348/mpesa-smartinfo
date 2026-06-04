@@ -10,7 +10,7 @@ export class PingController {
       if (!userId) return res.status(401).json({ error: 'Não autorizado.' });
 
       const { latitude, longitude, agentId, amount, operationType } = req.body;
-      if (latitude === undefined || longitude === undefined || !agentId || !amount || !operationType) {
+      if (latitude === undefined || longitude === undefined || !agentId || amount === undefined || !operationType) {
         return res.status(400).json({ error: 'Campos obrigatórios em falta (latitude, longitude, agentId, amount, operationType).' });
       }
 

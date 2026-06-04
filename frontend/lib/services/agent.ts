@@ -1,4 +1,4 @@
-import { Agent } from '../types'
+import { Agent, Request, Reservation } from '../types'
 import { MOCK_AGENTS } from '../mock-data'
 import { authHeaders, getApiUrl } from '@/lib/socket'
 
@@ -108,6 +108,72 @@ export const agentService = {
   async updateAgentBalance(agentId: string): Promise<Agent | null> {
     return this.getAgent(agentId)
   },
+
+  async createRequest(
+    customerId: string,
+    agentId: string,
+    type: Request['type'],
+    amount: number = 0,
+    latitude: number = 0,
+    longitude: number = 0,
+  ): Promise<Request> {
+    try {
+      const ping = await apiRequest('/ping', {
+        method: 'POST',
+        body: JSON.stringify({
+          latitude,
+          longitude,
+          agentId,
+          amount,
+          operationType: type,
+        }),
+      })
+
+      return mapPingToRequest(ping)
+    } catch {
+      return {
+        id: `req-${Date.now()}`,
+        customerId,
+        agentId,
+        type,
+        amount,
+        status: 'pending',
+        createdAt: new Date(),
+      }
+    }
+  },
+
+  async createReservation(requestId: string, agentId: string, customerId: string, eta: number): Promise<Reservation> {
+    try {
+      const ping = await apiRequest(`/ping/${requestId}`)
+      return mapPingToReservation(ping, agentId, customerId, eta)
+    } catch {
+      return {
+        id: `res-${Date.now()}`,
+        requestId,
+        agentId,
+        customerId,
+        eta,
+        pickupReference: `MPESA-${Date.now().toString().slice(-6)}`,
+        status: 'active',
+        expiresAt: new Date(Date.now() + eta * 60 * 1000),
+        createdAt: new Date(),
+      }
+    }
+  },
+
+  async getActiveReservations(customerId: string): Promise<Reservation[]> {
+    try {
+      const pings = await apiRequest('/ping/active')
+      if (!Array.isArray(pings)) return []
+
+      return pings
+        .filter((ping) => ping.userId === customerId && ping.reservationExpires)
+        .map((ping) => mapPingToReservation(ping, ping.agentId, customerId, 10))
+    } catch {
+      return []
+    }
+  },
 }
 
 function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -122,4 +188,32 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
       Math.sin(dLng / 2)
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
   return radius * c
+}
+
+function mapPingToRequest(ping: any): Request {
+  const status = String(ping.status || '').toUpperCase()
+
+  return {
+    id: ping.id,
+    customerId: ping.userId,
+    agentId: ping.agentId,
+    type: ping.operationType || 'info',
+    amount: ping.amount,
+    status: status === 'ACCEPTED' || status === 'ON_MY_WAY' ? 'confirmed' : status === 'COMPLETED' ? 'completed' : 'pending',
+    createdAt: ping.createdAt ? new Date(ping.createdAt) : new Date(),
+  } as Request
+}
+
+function mapPingToReservation(ping: any, agentId: string, customerId: string, eta: number): Reservation {
+  return {
+    id: ping.id,
+    requestId: ping.id,
+    agentId: ping.agentId || agentId,
+    customerId: ping.userId || customerId,
+    eta,
+    pickupReference: ping.reservationToken || `MPESA-${String(ping.id || Date.now()).slice(-6)}`,
+    status: String(ping.status || '').toUpperCase() === 'COMPLETED' ? 'completed' : 'active',
+    expiresAt: ping.reservationExpires ? new Date(ping.reservationExpires) : new Date(Date.now() + eta * 60 * 1000),
+    createdAt: ping.createdAt ? new Date(ping.createdAt) : new Date(),
+  }
 }

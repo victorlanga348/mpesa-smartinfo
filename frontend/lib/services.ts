@@ -7,6 +7,25 @@ const API = axios.create({
   baseURL: getApiUrl(),
 })
 
+function normalizeAgent(agent: any): Agent {
+  const fallback = MOCK_AGENTS.find((item) => item.id === agent.id)
+  const status = String(agent.status || fallback?.status || 'offline').toUpperCase()
+
+  return {
+    id: agent.id,
+    name: agent.name || fallback?.name || 'Agente M-Pesa',
+    phone: agent.phone || fallback?.phone || '',
+    latitude: Number(agent.latitude ?? fallback?.latitude ?? -25.9692),
+    longitude: Number(agent.longitude ?? fallback?.longitude ?? 32.5732),
+    status: status === 'ONLINE' ? 'online' : status === 'ON_MY_WAY' ? 'busy' : 'offline',
+    location: agent.reference || fallback?.location || 'Localizacao actual',
+    rating: fallback?.rating ?? 4.7,
+    responseTime: fallback?.responseTime ?? 25,
+    totalRequests: fallback?.totalRequests ?? 0,
+    distanceKm: fallback?.distanceKm,
+  }
+}
+
 // Inject token to requests if present
 API.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
@@ -25,9 +44,11 @@ API.interceptors.request.use((config) => {
 export const agentService = {
   async getAllAgents(): Promise<Agent[]> {
     try {
-      const response = await API.get('/ping/active')
-      if (Array.isArray(response.data?.agents)) {
-        return response.data.agents
+      const response = await API.get('/agent')
+      if (Array.isArray(response.data)) {
+        return response.data
+          .filter((agent) => agent.latitude !== null && agent.longitude !== null)
+          .map(normalizeAgent)
       }
     } catch (e) {
       console.log('Error fetching agents, using mock data:', e)
@@ -38,10 +59,12 @@ export const agentService = {
 
   async getNearbyAgents(lat: number, lng: number, radiusKm: number = 2): Promise<Agent[]> {
     try {
-      const response = await API.get('/ping/active')
-      const agentsRes = await API.get('/agent/profile').catch(() => null)
-      if (agentsRes && agentsRes.data) {
-        return [agentsRes.data]
+      const response = await API.get('/agent')
+      if (Array.isArray(response.data)) {
+        return response.data
+          .filter((agent) => agent.latitude !== null && agent.longitude !== null)
+          .map(normalizeAgent)
+          .filter((agent) => agent.status !== 'offline')
       }
     } catch (e) {
       console.log('Error fetching active agents, using mock data:', e)

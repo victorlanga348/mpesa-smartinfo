@@ -37,7 +37,7 @@ export class AgentService {
     }
 
     const token = jwt.sign(
-      { id: agent.id, name: agent.name, phone: agent.phone },
+      { id: agent.id, name: agent.name, phone: agent.phone, role: 'agent' },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
