@@ -14,12 +14,16 @@ export interface AuthPayload {
   role: AuthRole;
 }
 
-export interface AuthenticatedRequest extends Request {
-  auth?: AuthPayload;
-  agent?: AuthPayload;
+declare global {
+  namespace Express {
+    interface Request {
+      auth?: AuthPayload;
+      agent?: AuthPayload;
+    }
+  }
 }
 
-export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+export function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Nao autorizado. Token nao fornecido.' });
@@ -42,7 +46,7 @@ export function authMiddleware(req: AuthenticatedRequest, res: Response, next: N
 }
 
 export function requireRole(...roles: AuthRole[]) {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: Request, res: Response, next: NextFunction) => {
     if (!req.auth) {
       return res.status(401).json({ error: 'Nao autorizado.' });
     }

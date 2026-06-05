@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { UserService } from '../services/UserService';
-import { AuthenticatedRequest } from '../middlewares/auth';
+import { getErrorMessage } from '../utils/errors';
 
 export class UserController {
   static async register(req: Request, res: Response) {
@@ -12,8 +12,8 @@ export class UserController {
 
       const user = await UserService.register(name, phone);
       return res.status(201).json(user);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 
@@ -26,12 +26,12 @@ export class UserController {
 
       const data = await UserService.login(name, code);
       return res.status(200).json(data);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 
-  static async getProfile(req: AuthenticatedRequest, res: Response) {
+  static async getProfile(req: Request, res: Response) {
     try {
       const userId = req.agent?.id;
       if (!userId) return res.status(401).json({ error: 'Não autorizado.' });
@@ -40,12 +40,12 @@ export class UserController {
       if (!profile) return res.status(404).json({ error: 'Utilizador não encontrado.' });
 
       return res.status(200).json(profile);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 
-  static async updateLocation(req: AuthenticatedRequest, res: Response) {
+  static async updateLocation(req: Request, res: Response) {
     try {
       const userId = req.agent?.id;
       if (!userId) return res.status(401).json({ error: 'Não autorizado.' });
@@ -57,20 +57,20 @@ export class UserController {
 
       const updated = await UserService.updateLocation(userId, Number(latitude), Number(longitude));
       return res.status(200).json(updated);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 
-  static async getPingHistory(req: AuthenticatedRequest, res: Response) {
+  static async getPingHistory(req: Request, res: Response) {
     try {
       const userId = req.agent?.id;
       if (!userId) return res.status(401).json({ error: 'Não autorizado.' });
 
       const pings = await UserService.getPingHistory(userId);
       return res.status(200).json(pings);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 }

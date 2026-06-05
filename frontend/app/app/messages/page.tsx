@@ -6,11 +6,13 @@ import { authService } from '@/lib/services/auth'
 import { agentService } from '@/lib/services/agent'
 import { Button } from '@/components/ui/button'
 import { MessageCircle, ArrowRight } from 'lucide-react'
+import { ConversationSummary, Message } from '@/lib/types'
+import { parseJson } from '@/lib/runtime'
 
 export const dynamic = 'force-dynamic'
 
 export default function MessagesPage() {
-  const [conversations, setConversations] = useState<any[]>([])
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const user = authService.getCurrentUser()
@@ -24,14 +26,14 @@ export default function MessagesPage() {
         // For now, show stored messages
         const stored = localStorage.getItem('smartinfo_messages')
         if (stored) {
-          const messages = JSON.parse(stored)
-          const convos = Object.entries(messages).map(([key, msgs]: any) => {
-            const otherUser = key.split('-').find((id: string) => id !== user.id)
+          const messages = parseJson<Record<string, Message[]>>(stored, {})
+          const convos = Object.entries(messages).map(([key, msgs]) => {
+            const otherUser = key.split('-').find((id) => id !== user.id) || key
             return {
               id: otherUser,
               lastMessage: msgs[msgs.length - 1]?.text || 'Sem mensagens',
               timestamp: msgs[msgs.length - 1]?.timestamp || new Date(),
-              unread: msgs.some((m: any) => m.receiverId === user.id && !m.read),
+              unread: msgs.some((message) => message.receiverId === user.id && !message.read),
             }
           })
           setConversations(convos)

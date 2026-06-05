@@ -1,13 +1,14 @@
 import axios from 'axios'
-import { Agent, Request, Message, Reservation, AdminMetrics } from '@/lib/types'
+import { Agent, Request, Message, Reservation, AdminMetrics, ApiAgent, ApiPing, LocalRequest } from '@/lib/types'
 import { MOCK_AGENTS, CRITICAL_ZONES } from '@/lib/mock-data'
 import { getApiUrl } from '@/lib/socket'
+import { parseJson } from '@/lib/runtime'
 
 const API = axios.create({
   baseURL: getApiUrl(),
 })
 
-function normalizeAgent(agent: any): Agent {
+function normalizeAgent(agent: ApiAgent): Agent {
   const fallback = MOCK_AGENTS.find((item) => item.id === agent.id)
   const status = String(agent.status || fallback?.status || 'offline').toUpperCase()
 
@@ -116,59 +117,36 @@ export const agentService = {
   },
 
   async pingAgent(agentId: string, amount: number, operationType: string = 'withdrawal', lat: number = 0, lng: number = 0) {
-    try {
-      const response = await API.post('/ping', {
-        latitude: lat,
-        longitude: lng,
-        agentId,
-        amount,
-        operationType
-      })
-      return response.data
-    } catch {
-      return {
-        id: `ping-${Date.now()}`,
-        agentId,
-        amount,
-        operationType,
-        status: 'pending',
-      }
-    }
+    const response = await API.post('/ping', {
+      latitude: lat,
+      longitude: lng,
+      agentId,
+      amount,
+      operationType
+    })
+    return response.data
   }
 }
 
 // Request Service
 export const requestService = {
   async createRequest(customerId: string, agentId: string, type: string, amount?: number, lat: number = 0, lng: number = 0) {
-    try {
-      const response = await API.post('/ping', {
-        latitude: lat,
-        longitude: lng,
-        agentId,
-        amount,
-        operationType: type
-      })
-      return response.data
-    } catch {
-      return {
-        id: `req-${Date.now()}`,
-        customerId,
-        userId: customerId,
-        agentId,
-        type,
-        amount,
-        status: 'pending',
-        createdAt: new Date(),
-      }
-    }
+    const response = await API.post('/ping', {
+      latitude: lat,
+      longitude: lng,
+      agentId,
+      amount,
+      operationType: type
+    })
+    return response.data
   },
 
   async confirmRequest(requestId: string) {
     try {
-      const response = await API.put(`/ping/${requestId}/status`, { status: 'ON_MY_WAY' })
+      const response = await API.put(`/ping/${requestId}/status`, { status: 'WAITING_LIST' })
       return response.data
     } catch {
-      return { id: requestId, status: 'confirmed' }
+      return { id: requestId, status: 'waiting_list' }
     }
   },
 
@@ -181,12 +159,22 @@ export const requestService = {
     }
   },
 
+  async cancelPing(requestId: string) {
+    const response = await API.put(`/ping/${requestId}/cancel`)
+    return response.data
+  },
+
+  async markArrived(requestId: string) {
+    const response = await API.put(`/ping/${requestId}/arrive`)
+    return response.data
+  },
+
   async acceptPing(requestId: string) {
     try {
       const response = await API.put(`/ping/${requestId}/accept`)
       return response.data
     } catch {
-      return { id: requestId, status: 'accepted' }
+      return { id: requestId, status: 'waiting_list' }
     }
   }
 }
@@ -212,7 +200,7 @@ export const chatService = {
 
 // Reservation Service
 export const reservationService = {
-  async createReservation(customerId: string, agentId: string, requestId: string, eta: number) {
+  async createReservation(customerId: string, agentId: string, requestId: string, eta: number): Promise<Reservation> {
     try {
       const response = await API.get(`/ping/${requestId}`)
       return {
@@ -247,10 +235,10 @@ export const adminService = {
   async getDashboardMetrics(): Promise<AdminMetrics> {
     const getLocalMetrics = (): AdminMetrics => {
       const storedRequests = typeof window !== 'undefined' ? localStorage.getItem('smartinfo_requests') : null
-      const requests = storedRequests ? JSON.parse(storedRequests) : []
+      const requests = parseJson<LocalRequest[]>(storedRequests, [])
       const totalUsers = typeof window !== 'undefined' && localStorage.getItem('smartinfo_user') ? 1 : 0
-      const successfulRequests = requests.filter((request: any) => request.status === 'completed' || request.status === 'arrived').length
-      const failedRequests = requests.filter((request: any) => request.status === 'cancelled' || request.status === 'rejected').length
+      const successfulRequests = requests.filter((request) => request.status === 'completed' || request.status === 'arrived').length
+      const failedRequests = requests.filter((request) => request.status === 'cancelled' || request.status === 'rejected').length
 
       return {
         totalUsers: Math.max(totalUsers, 1),
@@ -260,10 +248,10 @@ export const adminService = {
         avgResponseTime: Math.round(MOCK_AGENTS.reduce((sum, agent) => sum + agent.responseTime, 0) / MOCK_AGENTS.length),
         activeZones: CRITICAL_ZONES,
         requestsByType: {
-          withdrawal: requests.filter((request: any) => request.type === 'withdrawal').length,
-          deposit: requests.filter((request: any) => request.type === 'deposit').length,
-          payment: requests.filter((request: any) => request.type === 'payment').length,
-          info: requests.filter((request: any) => request.type === 'info').length,
+          withdrawal: requests.filter((request) => request.type === 'withdrawal').length,
+          deposit: requests.filter((request) => request.type === 'deposit').length,
+          payment: requests.filter((request) => request.type === 'payment').length,
+          info: requests.filter((request) => request.type === 'info').length,
         },
       }
     }
@@ -303,19 +291,14 @@ export const adminService = {
 export const authService = {
   // Cliente: registar com nome (recebe código)
   async registerClient(name: string, phone?: string) {
-    try {
-      const response = await API.post('/user/register', { name, phone })
-      return response.data
-    } catch {
-      return {
-        id: `customer-${Date.now()}`,
-        name,
-        phone: phone || '',
-        role: 'customer',
-        type: 'customer',
-        token: `demo-token-${Date.now()}`,
-      }
+    const response = await API.post('/user/register', { name, phone })
+    const data = response.data
+
+    if (data?.token && data?.user) {
+      localStorage.setItem('smartinfo_user', JSON.stringify({ ...data.user, token: data.token, role: 'customer', type: 'customer' }))
     }
+
+    return data
   },
 
   // Cliente: login com nome + código
@@ -325,17 +308,9 @@ export const authService = {
       const { token, user } = response.data
       localStorage.setItem('smartinfo_user', JSON.stringify({ ...user, token, role: 'customer', type: 'customer' }))
       return response.data
-    } catch {
-      const user = {
-        id: `customer-${Date.now()}`,
-        name,
-        phone: code,
-        role: 'customer',
-        type: 'customer',
-        token: `demo-token-${Date.now()}`,
-      }
-      localStorage.setItem('smartinfo_user', JSON.stringify(user))
-      return { user, token: user.token }
+    } catch (error) {
+      localStorage.removeItem('smartinfo_user')
+      throw error
     }
   },
 
@@ -346,75 +321,50 @@ export const authService = {
       const { token, user } = response.data
       localStorage.setItem('smartinfo_user', JSON.stringify({ ...user, token, role: 'admin', type: 'admin' }))
       return response.data
-    } catch {
-      const user = {
-        id: `admin-${Date.now()}`,
-        name: 'Administrador',
-        phone: email,
-        role: 'admin',
-        type: 'admin',
-        token: `demo-token-${Date.now()}`,
-      }
-      localStorage.setItem('smartinfo_user', JSON.stringify(user))
-      return { user, token: user.token }
+    } catch (error) {
+      throw error
     }
   },
 
   // Agente: login com telefone + senha (mantém igual)
-  async loginAgent(nameOrPhone: string, code: string) {
+  async loginAgent(name: string, code: string) {
     try {
-      const response = await API.post('/agent/login', { phone: nameOrPhone, password: code })
+      const response = await API.post('/agent/login', { name, code })
       const { token, agent } = response.data
       localStorage.setItem('smartinfo_user', JSON.stringify({ ...agent, token, role: 'agent', type: 'agent' }))
       return response.data
-    } catch {
-      const user = {
-        id: 'agent-001',
-        name: nameOrPhone || 'Joao Nhacachela',
-        phone: '+258843456789',
-        code,
-        role: 'agent',
-        type: 'agent',
-        token: `demo-token-${Date.now()}`,
-      }
-      localStorage.setItem('smartinfo_user', JSON.stringify(user))
-      return { user, token: user.token }
+    } catch (error) {
+      throw error
     }
   },
 
   // Agente: registar
-  async registerAgent(name: string, phone: string, password: string) {
+  async registerAgent(name: string, phone: string, code: string) {
     try {
-      const response = await API.post('/agent/register', { name, phone, password })
+      const response = await API.post('/agent/register', { name, phone, code })
       return response.data
-    } catch {
-      return {
-        id: `agent-${Date.now()}`,
-        name,
-        phone,
-        role: 'agent',
-        type: 'agent',
-        token: `demo-token-${Date.now()}`,
-      }
+    } catch (error) {
+      throw error
     }
   },
 
   // Legacy methods for backward compatibility
   async register(name: string, phone: string, neighborhood: string, type: 'customer' | 'agent') {
     if (type === 'agent') {
-      return this.registerAgent(name, phone, 'password123')
+      throw new Error('Agentes devem ser criados pela equipa operacional com nome e codigo.')
     }
-    return this.registerClient(name, phone)
+    const data = await this.registerClient(name, phone)
+    return data.user ? { ...data.user, token: data.token, role: 'customer', type: 'customer' } : data
   },
 
-  async login(phone: string, password: string, type: 'customer' | 'agent' | 'admin') {
+  async login(identifier: string, secret: string, type: 'customer' | 'agent' | 'admin') {
     if (type === 'admin') {
-      return this.loginAdmin(phone, password) // phone is actually email here
+      return this.loginAdmin(identifier, secret)
     }
     if (type === 'agent') {
-      return this.loginAgent(phone, password)
+      return this.loginAgent(identifier, secret)
     }
-    return this.loginClient(phone, password) // phone is name, password is code
+    return this.loginClient(identifier, secret)
   },
 
   async logout() {

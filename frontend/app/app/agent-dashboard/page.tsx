@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, CheckCircle, Clock, MapPin, Radio } from 'lucide-react'
+import { AlertCircle, CheckCircle, Clock, MapPin, Radio, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { StatusBadge } from '@/components/ui/status-badge'
 import { useGeolocation } from '@/hooks/use-geolocation'
@@ -10,18 +10,46 @@ import { useSocket } from '@/hooks/use-socket'
 import { agentService } from '@/lib/services/agent'
 import { authService } from '@/lib/services/auth'
 import { authHeaders, getApiUrl } from '@/lib/socket'
-import { Agent, Request } from '@/lib/types'
+import { Agent, ApiPing, Request } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
 
 export default function AgentDashboardPage() {
   const router = useRouter()
-  const user = authService.getCurrentUser()
+  const [user, setUser] = useState(() => authService.getCurrentUser())
   const [agent, setAgent] = useState<Agent | null>(null)
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
   const [serviceEnabled, setServiceEnabled] = useState(false)
   const { socket, state: socketState } = useSocket()
+  const activeRequestsLoadingRef = useRef(false)
+
+  const loadActiveRequests = useCallback(async (agentId: string) => {
+    if (!agentId || activeRequestsLoadingRef.current) return
+
+    activeRequestsLoadingRef.current = true
+    try {
+      const response = await fetch(`${getApiUrl()}/ping/active`, { headers: authHeaders() })
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({}))
+        console.error('Failed to load active pings:', errorBody)
+        return
+      }
+
+      const activePings = await response.json().catch(() => [])
+
+      if (Array.isArray(activePings)) {
+        setRequests(activePings
+          .filter((ping: ApiPing) => ping.agentId === agentId)
+          .map(mapPingToRequest))
+      }
+    } catch (error) {
+      console.error(`Failed to fetch active pings from ${getApiUrl()}/ping/active:`, error)
+    } finally {
+      activeRequestsLoadingRef.current = false
+    }
+  }, [])
 
   const handleAgentLocation = useCallback(async ({ latitude, longitude }: { latitude: number; longitude: number }) => {
     if (!agent) return
@@ -44,6 +72,10 @@ export default function AgentDashboardPage() {
   })
 
   useEffect(() => {
+    setUser(authService.getCurrentUser())
+  }, [])
+
+  useEffect(() => {
     if (!user || user.role !== 'agent') {
       router.push('/auth')
       return
@@ -52,18 +84,13 @@ export default function AgentDashboardPage() {
     const loadData = async () => {
       try {
         const agents = await agentService.getAgents()
-        const currentAgent = agents.find((item) => item.id === user.id || item.phone === user.phone)
+        const currentAgent = agents.find((item) => item.id === user.id)
 
         if (currentAgent) {
           setAgent(currentAgent)
+          setServiceEnabled(true)
           socket.emit('join:agent', currentAgent.id)
-        }
-
-        const response = await fetch(`${getApiUrl()}/ping/active`, { headers: authHeaders() })
-        const activePings = await response.json()
-
-        if (Array.isArray(activePings)) {
-          setRequests(activePings.filter((ping: any) => ping.agentId === (currentAgent?.id || user.id)).map(mapPingToRequest))
+          await loadActiveRequests(currentAgent.id)
         }
       } catch (error) {
         console.error('Failed to load agent dashboard:', error)
@@ -73,38 +100,57 @@ export default function AgentDashboardPage() {
     }
 
     loadData()
-  }, [router, socket, user])
+  }, [loadActiveRequests, router, socket, user?.id, user?.role])
 
   useEffect(() => {
     if (!agent) return
 
     socket.emit('join:agent', agent.id)
 
-    const upsertRequest = (ping: any) => {
+    const upsertRequest = (ping: ApiPing) => {
+      if (ping.agentId !== agent.id) return
+
       setRequests((current) => {
         const next = mapPingToRequest(ping)
         const exists = current.some((request) => request.id === next.id)
         return exists ? current.map((request) => request.id === next.id ? { ...request, ...next } : request) : [next, ...current]
       })
     }
-    const removeRequest = (ping: any) => {
+    const removeRequest = (ping: ApiPing) => {
       setRequests((current) => current.filter((request) => request.id !== ping.id))
     }
 
     socket.on('ping:created', upsertRequest)
     socket.on('ping:accepted', upsertRequest)
+    socket.on('ping:waiting-list', upsertRequest)
+    socket.on('ping:in-service', upsertRequest)
     socket.on('ping:on-the-way', upsertRequest)
     socket.on('ping:arrived', removeRequest)
+    socket.on('ping:cancelled', removeRequest)
+    socket.on('ping:rejected', removeRequest)
+    socket.on('ping:completed', removeRequest)
     socket.on('ping:expired', removeRequest)
+
+    const interval = window.setInterval(() => {
+      loadActiveRequests(agent.id).catch((error) => {
+        console.error('Failed to refresh active requests:', error)
+      })
+    }, 5000)
 
     return () => {
       socket.off('ping:created', upsertRequest)
       socket.off('ping:accepted', upsertRequest)
+      socket.off('ping:waiting-list', upsertRequest)
+      socket.off('ping:in-service', upsertRequest)
       socket.off('ping:on-the-way', upsertRequest)
       socket.off('ping:arrived', removeRequest)
+      socket.off('ping:cancelled', removeRequest)
+      socket.off('ping:rejected', removeRequest)
+      socket.off('ping:completed', removeRequest)
       socket.off('ping:expired', removeRequest)
+      window.clearInterval(interval)
     }
-  }, [agent, socket])
+  }, [agent, loadActiveRequests, socket])
 
   const toggleStatus = async (newStatus: 'online' | 'offline' | 'busy') => {
     if (!agent) return
@@ -137,6 +183,34 @@ export default function AgentDashboardPage() {
     }
   }
 
+  const rejectRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`${getApiUrl()}/ping/${requestId}/reject`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      })
+      const ping = await response.json()
+      if (!response.ok) throw new Error(ping.error || 'Erro ao negar pedido')
+      setRequests((current) => current.filter((request) => request.id !== requestId))
+    } catch (error) {
+      console.error('Failed to reject request:', error)
+    }
+  }
+
+  const completeRequest = async (requestId: string) => {
+    try {
+      const response = await fetch(`${getApiUrl()}/ping/${requestId}/complete`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+      })
+      const ping = await response.json()
+      if (!response.ok) throw new Error(ping.error || 'Erro ao finalizar atendimento')
+      setRequests((current) => current.filter((request) => request.id !== requestId))
+    } catch (error) {
+      console.error('Failed to complete request:', error)
+    }
+  }
+
   if (loading) {
     return <PageMessage text="A carregar painel do agente..." />
   }
@@ -146,14 +220,16 @@ export default function AgentDashboardPage() {
       <div className="space-y-4">
         <h1 className="text-2xl font-bold text-gray-900">Painel do agente</h1>
         <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-          <p className="text-red-800">Perfil de agente nao encontrado. Confirme o telefone usado no login.</p>
+          <p className="text-red-800">Perfil de agente nao encontrado. Confirme o nome e codigo usados no login.</p>
         </div>
       </div>
     )
   }
 
-  const pendingRequests = requests.filter((request) => request.status === 'pending').length
-  const clientsOnWay = requests.filter((request) => request.status === 'confirmed').length
+  const pendingList = requests.filter((request) => request.status === 'pending')
+  const queueList = requests.filter((request) => ['accepted', 'waiting_list'].includes(request.status))
+  const pendingRequests = pendingList.length
+  const clientsOnWay = queueList.length
 
   return (
     <div className="space-y-8">
@@ -175,7 +251,7 @@ export default function AgentDashboardPage() {
             <p className="text-gray-600">{agent.location}</p>
             <p className="mt-2 text-sm text-gray-500">A localizacao actualiza enquanto estiver em servico.</p>
           </div>
-          <StatusBadge status={agent.status as any} />
+          <StatusBadge status={agent.status} />
         </div>
 
         <div className="mt-6 flex flex-wrap gap-3">
@@ -200,35 +276,75 @@ export default function AgentDashboardPage() {
 
       <section className="overflow-hidden rounded-lg border border-gray-200 bg-white">
         <div className="border-b border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900">Pedidos pendentes</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Pedidos recebidos</h2>
         </div>
 
-        {requests.length === 0 ? (
+        {pendingList.length === 0 ? (
           <div className="p-8 text-center">
             <AlertCircle className="mx-auto mb-3 size-12 text-gray-300" />
-            <p className="text-gray-600">Ainda nao existem pedidos para este agente.</p>
+            <p className="text-gray-600">Nao existem pedidos pendentes.</p>
           </div>
         ) : (
           <div className="divide-y divide-gray-200">
-            {requests.map((request) => (
+            {pendingList.map((request) => (
               <div key={request.id} className="p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="font-medium text-gray-900">{operationLabel(request.type)}</p>
+                    <p className="text-sm text-gray-600">Cliente: {request.customerName || 'Cliente'}</p>
+                    {request.customerPhone && <p className="text-sm text-gray-500">Contacto: {request.customerPhone}</p>}
                     {request.amount && <p className="text-sm text-gray-600">Valor solicitado: {request.amount.toLocaleString('pt-MZ')} MT</p>}
                   </div>
-                  <StatusBadge status={request.status as any} />
+                  <StatusBadge status={request.status} />
                 </div>
-                {request.status === 'pending' && (
+                <div className="mt-3 flex flex-wrap gap-2">
                   <Button onClick={() => acceptRequest(request.id)} className="mt-3 bg-[#16A34A] text-white hover:bg-green-700">
-                    Aceitar pedido
+                    Aceitar
                   </Button>
-                )}
-                {request.status === 'confirmed' && (
+                  <Button onClick={() => rejectRequest(request.id)} variant="outline" className="mt-3 border-red-200 text-red-700 hover:bg-red-50">
+                    Negar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+        <div className="border-b border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900">Clientes aceites / lista de espera</h2>
+        </div>
+
+        {queueList.length === 0 ? (
+          <div className="p-8 text-center">
+            <AlertCircle className="mx-auto mb-3 size-12 text-gray-300" />
+            <p className="text-gray-600">Ainda nao existem clientes aceites.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-200">
+            {queueList.map((request) => (
+              <div key={request.id} className="p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-medium text-gray-900">{request.customerName || 'Cliente'}</p>
+                    {request.customerPhone && <p className="text-sm text-gray-500">Contacto: {request.customerPhone}</p>}
+                    <p className="text-sm text-gray-600">{operationLabel(request.type)}{request.amount ? ` - ${request.amount.toLocaleString('pt-MZ')} MT` : ''}</p>
+                  </div>
+                  <StatusBadge status={request.status} />
+                </div>
+                {request.status === 'arrived' ? (
+                  <p className="mt-3 rounded-lg bg-green-50 p-3 text-sm font-medium text-green-800">
+                    Cliente marcou que chegou.
+                  </p>
+                ) : (
                   <p className="mt-3 rounded-lg bg-blue-50 p-3 text-sm font-medium text-blue-800">
-                    Cliente confirmou que esta a caminho. Quando tocar em Ja cheguei, sai automaticamente desta lista.
+                    Cliente aceite e em lista de espera.
                   </p>
                 )}
+                <Button onClick={() => completeRequest(request.id)} className="mt-3 bg-[#E60000] text-white hover:bg-red-700">
+                  Finalizar/remover
+                </Button>
               </div>
             ))}
           </div>
@@ -248,7 +364,7 @@ export default function AgentDashboardPage() {
   )
 }
 
-function MetricCard({ icon: Icon, label, value }: { icon: any; label: string; value: string }) {
+function MetricCard({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6">
       <div className="flex items-center justify-between">
@@ -277,16 +393,29 @@ function operationLabel(type: Request['type']) {
   return 'Informacao'
 }
 
-function mapPingToRequest(ping: any): Request {
+function mapPingToRequest(ping: ApiPing): Request {
   const status = String(ping.status || '').toUpperCase()
 
   return {
     id: ping.id,
     customerId: ping.userId,
+    customerName: ping.user?.name || undefined,
+    customerPhone: ping.user?.phone || undefined,
     agentId: ping.agentId,
     type: ping.operationType || 'withdrawal',
     amount: ping.amount,
-    status: status === 'ACCEPTED' || status === 'ON_MY_WAY' ? 'confirmed' : 'pending',
+    status: mapPingStatus(status),
     createdAt: ping.createdAt ? new Date(ping.createdAt) : new Date(),
   } as Request
+}
+
+function mapPingStatus(status: string): Request['status'] {
+  if (status === 'ACCEPTED') return 'accepted'
+  if (status === 'WAITING_LIST') return 'waiting_list'
+  if (status === 'ARRIVED') return 'arrived'
+  if (status === 'IN_SERVICE' || status === 'ON_MY_WAY') return 'accepted'
+  if (status === 'COMPLETED') return 'completed'
+  if (status === 'CANCELLED') return 'cancelled'
+  if (status === 'REJECTED' || status === 'EXPIRED') return 'rejected'
+  return 'pending'
 }

@@ -151,7 +151,7 @@ export function FeaturesSection() {
   )
 }
 
-function CheckIcon(props: any) {
+function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       {...props}

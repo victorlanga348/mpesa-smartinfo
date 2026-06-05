@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertCircle, CheckCircle, MapPin, Radio, Users } from 'lucide-react'
+import { AlertCircle, CheckCircle, MapPin, Radio, Users, type LucideIcon } from 'lucide-react'
 import { useSocket } from '@/hooks/use-socket'
 import { adminService } from '@/lib/services/admin'
-import { AdminMetrics } from '@/lib/types'
+import { AdminMetrics, StoredUser } from '@/lib/types'
+import { parseJson } from '@/lib/runtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,7 +18,7 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     const userData = localStorage.getItem('smartinfo_user')
-    const user = userData ? JSON.parse(userData) : null
+    const user = parseJson<StoredUser | null>(userData, null)
     if (!user || (user.role !== 'admin' && user.type !== 'admin')) {
       router.push('/login')
       return
@@ -140,7 +141,7 @@ export default function AdminDashboardPage() {
   )
 }
 
-function MetricCard({ icon: Icon, label, value, empty = false }: { icon: any; label: string; value: string; empty?: boolean }) {
+function MetricCard({ icon: Icon, label, value, empty = false }: { icon: LucideIcon; label: string; value: string; empty?: boolean }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-6">
       <div className="flex items-center justify-between">

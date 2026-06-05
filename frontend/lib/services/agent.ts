@@ -1,10 +1,10 @@
-import { Agent, Request, Reservation } from '../types'
+import { Agent, Request, Reservation, ApiAgent, ApiPing } from '../types'
 import { MOCK_AGENTS } from '../mock-data'
 import { authHeaders, getApiUrl } from '@/lib/socket'
 
 const AGENTS_STORAGE_KEY = 'smartinfo_agents'
 
-function normalizeAgent(agent: any): Agent {
+function normalizeAgent(agent: ApiAgent): Agent {
   const fallback = MOCK_AGENTS.find((item) => item.id === agent.id)
   const status = String(agent.status || fallback?.status || 'offline').toUpperCase()
 
@@ -190,7 +190,7 @@ function calculateDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
   return radius * c
 }
 
-function mapPingToRequest(ping: any): Request {
+function mapPingToRequest(ping: ApiPing): Request {
   const status = String(ping.status || '').toUpperCase()
 
   return {
@@ -199,12 +199,23 @@ function mapPingToRequest(ping: any): Request {
     agentId: ping.agentId,
     type: ping.operationType || 'info',
     amount: ping.amount,
-    status: status === 'ACCEPTED' || status === 'ON_MY_WAY' ? 'confirmed' : status === 'COMPLETED' ? 'completed' : 'pending',
+    status: mapPingStatus(status),
     createdAt: ping.createdAt ? new Date(ping.createdAt) : new Date(),
   } as Request
 }
 
-function mapPingToReservation(ping: any, agentId: string, customerId: string, eta: number): Reservation {
+function mapPingStatus(status: string): Request['status'] {
+  if (status === 'ACCEPTED') return 'accepted'
+  if (status === 'WAITING_LIST') return 'waiting_list'
+  if (status === 'ARRIVED') return 'arrived'
+  if (status === 'IN_SERVICE' || status === 'ON_MY_WAY') return 'in_service'
+  if (status === 'COMPLETED') return 'completed'
+  if (status === 'CANCELLED') return 'cancelled'
+  if (status === 'REJECTED' || status === 'EXPIRED') return 'rejected'
+  return 'pending'
+}
+
+function mapPingToReservation(ping: ApiPing, agentId: string, customerId: string, eta: number): Reservation {
   return {
     id: ping.id,
     requestId: ping.id,

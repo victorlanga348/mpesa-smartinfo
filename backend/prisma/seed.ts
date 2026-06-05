@@ -1,56 +1,91 @@
+/// <reference types="node" />
+
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+const DEV_ADMIN = {
+  name: 'Admin Desenvolvimento',
+  email: 'admin.dev@smartinfo.co.mz',
+  password: 'AdminDev123!',
+};
+
+const DEV_AGENT = {
+  name: 'Agente Teste',
+  code: '246810',
+  phone: '840000001',
+  latitude: -25.9692,
+  longitude: 32.5732,
+  reference: 'Mercado Central, Maputo',
+};
+
+const DEV_CLIENT = {
+  name: 'Maria Joaquina',
+  code: '123456',
+  phone: '841234567',
+  latitude: -25.9692,
+  longitude: 32.5732,
+};
+
 async function main() {
-  console.log('🌱 A semear dados fictícios...');
+  console.log('Seeding development data...');
 
-  // ── Cliente fictício ──
-  // Login: nome = "Maria Joaquina", código = "123456"
-  const existingUser = await prisma.user.findUnique({ where: { code: '123456' } });
-  if (!existingUser) {
-    const user = await prisma.user.create({
-      data: {
-        name: 'Maria Joaquina',
-        code: '123456',
-        phone: '841234567',
-        latitude: -25.9692,
-        longitude: 32.5732,
-      },
-    });
-    console.log('✅ Cliente criado:', user.name);
-    console.log('   Nome: Maria Joaquina');
-    console.log('   Código: 123456');
-  } else {
-    console.log('ℹ️  Cliente "Maria Joaquina" já existe.');
-  }
+  await prisma.user.upsert({
+    where: { code: DEV_CLIENT.code },
+    update: {
+      name: DEV_CLIENT.name,
+      phone: DEV_CLIENT.phone,
+      latitude: DEV_CLIENT.latitude,
+      longitude: DEV_CLIENT.longitude,
+    },
+    create: DEV_CLIENT,
+  });
 
-  // ── Admin fictício ──
-  // Login: email = "admin@smartinfo.co.mz", senha = "admin123"
-  const existingAdmin = await prisma.admin.findUnique({ where: { email: 'admin@smartinfo.co.mz' } });
-  if (!existingAdmin) {
-    const hashedPassword = await bcrypt.hash('admin123', 10);
-    const admin = await prisma.admin.create({
-      data: {
-        name: 'Carlos Administrador',
-        email: 'admin@smartinfo.co.mz',
-        password: hashedPassword,
-      },
-    });
-    console.log('✅ Admin criado:', admin.name);
-    console.log('   Email: admin@smartinfo.co.mz');
-    console.log('   Senha: admin123');
-  } else {
-    console.log('ℹ️  Admin "Carlos Administrador" já existe.');
-  }
+  const adminPassword = await bcrypt.hash(DEV_ADMIN.password, 10);
+  await prisma.admin.upsert({
+    where: { email: DEV_ADMIN.email },
+    update: {
+      name: DEV_ADMIN.name,
+      password: adminPassword,
+    },
+    create: {
+      name: DEV_ADMIN.name,
+      email: DEV_ADMIN.email,
+      password: adminPassword,
+    },
+  });
 
-  console.log('\n🎉 Seed concluído! Use as credenciais acima para fazer login.');
+  const agentCode = await bcrypt.hash(DEV_AGENT.code, 10);
+  await prisma.agent.upsert({
+    where: { phone: DEV_AGENT.phone },
+    update: {
+      name: DEV_AGENT.name,
+      password: agentCode,
+      status: 'ONLINE',
+      latitude: DEV_AGENT.latitude,
+      longitude: DEV_AGENT.longitude,
+      reference: DEV_AGENT.reference,
+    },
+    create: {
+      name: DEV_AGENT.name,
+      phone: DEV_AGENT.phone,
+      password: agentCode,
+      status: 'ONLINE',
+      latitude: DEV_AGENT.latitude,
+      longitude: DEV_AGENT.longitude,
+      reference: DEV_AGENT.reference,
+    },
+  });
+
+  console.log('Development seed complete.');
+  console.log(`Admin: ${DEV_ADMIN.email} / ${DEV_ADMIN.password}`);
+  console.log(`Agent: ${DEV_AGENT.name} / ${DEV_AGENT.code}`);
 }
 
 main()
-  .catch((e) => {
-    console.error('❌ Erro no seed:', e);
+  .catch((error) => {
+    console.error('Seed failed:', error);
     process.exit(1);
   })
   .finally(async () => {

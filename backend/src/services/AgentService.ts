@@ -6,13 +6,13 @@ import { AgentStatus } from '../types';
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretmpesatoken';
 
 export class AgentService {
-  static async register(name: string, phone: string, passwordUnhashed: string) {
+  static async register(name: string, phone: string, codeUnhashed: string) {
     const existing = await prisma.agent.findUnique({ where: { phone } });
     if (existing) {
       throw new Error('Agente com este número já registado.');
     }
 
-    const password = await bcrypt.hash(passwordUnhashed, 10);
+    const password = await bcrypt.hash(codeUnhashed, 10);
     const agent = await prisma.agent.create({
       data: {
         name,
@@ -25,35 +25,34 @@ export class AgentService {
     return { id: agent.id, name: agent.name, phone: agent.phone };
   }
 
-  static async login(phone: string, passwordUnhashed: string) {
-    const agent = await prisma.agent.findUnique({ where: { phone } });
-    if (!agent) {
-      throw new Error('Telefone ou palavra-passe incorreta.');
+  static async login(name: string, codeUnhashed: string) {
+    const agents = await prisma.agent.findMany({ where: { name } });
+
+    for (const agent of agents) {
+      const isValid = await bcrypt.compare(codeUnhashed, agent.password);
+      if (!isValid) continue;
+
+      const token = jwt.sign(
+        { id: agent.id, name: agent.name, phone: agent.phone, role: 'agent' },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+      );
+
+      return {
+        token,
+        agent: {
+          id: agent.id,
+          name: agent.name,
+          phone: agent.phone,
+          status: agent.status,
+          latitude: agent.latitude,
+          longitude: agent.longitude,
+          reference: agent.reference,
+        },
+      };
     }
 
-    const isValid = await bcrypt.compare(passwordUnhashed, agent.password);
-    if (!isValid) {
-      throw new Error('Telefone ou palavra-passe incorreta.');
-    }
-
-    const token = jwt.sign(
-      { id: agent.id, name: agent.name, phone: agent.phone, role: 'agent' },
-      JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    return {
-      token,
-      agent: {
-        id: agent.id,
-        name: agent.name,
-        phone: agent.phone,
-        status: agent.status,
-        latitude: agent.latitude,
-        longitude: agent.longitude,
-        reference: agent.reference,
-      },
-    };
+    throw new Error('Nome ou codigo do agente incorreto.');
   }
 
   static async listAgents() {

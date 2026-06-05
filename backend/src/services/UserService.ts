@@ -27,7 +27,21 @@ export class UserService {
       },
     });
 
-    return { id: user.id, name: user.name, code: user.code, phone: user.phone };
+    const token = jwt.sign(
+      { id: user.id, name: user.name, code: user.code, role: 'user' },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    return {
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        code: user.code,
+        phone: user.phone,
+      },
+    };
   }
 
   static async login(name: string, code: string) {

@@ -62,7 +62,7 @@ export default function Home() {
               A ferramenta ajuda a comparar deslocação, tempo de espera e alternativa digital antes de sair.
             </p>
             <Button asChild className="mt-6 h-12 rounded-full bg-primary px-7 font-black text-white hover:bg-red-700">
-              <Link href="/map">Testar no mapa</Link>
+              <Link href="/app/map">Testar no mapa</Link>
             </Button>
           </div>
 
@@ -132,7 +132,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="font-black text-gray-900">m-pesa smartinfo</div>
           <div className="flex gap-4">
-            <Link href="/map" className="hover:text-primary">Mapa</Link>
+            <Link href="/app/map" className="hover:text-primary">Mapa</Link>
             <Link href="/login" className="hover:text-primary">Agente/Admin</Link>
           </div>
         </div>

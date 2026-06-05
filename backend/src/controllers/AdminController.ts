@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { AdminService } from '../services/AdminService';
+import { getErrorMessage } from '../utils/errors';
 
 export class AdminController {
   static async register(req: Request, res: Response) {
@@ -11,8 +12,8 @@ export class AdminController {
 
       const admin = await AdminService.register(name, email, password);
       return res.status(201).json(admin);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 
@@ -25,8 +26,8 @@ export class AdminController {
 
       const data = await AdminService.login(email, password);
       return res.status(200).json(data);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 
@@ -34,8 +35,8 @@ export class AdminController {
     try {
       const stats = await AdminService.getStats();
       return res.status(200).json(stats);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 
@@ -43,8 +44,8 @@ export class AdminController {
     try {
       const zones = await AdminService.getCriticalZones();
       return res.status(200).json(zones);
-    } catch (error: any) {
-      return res.status(400).json({ error: error.message });
+    } catch (error: unknown) {
+      return res.status(400).json({ error: getErrorMessage(error) });
     }
   }
 }

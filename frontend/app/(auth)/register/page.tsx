@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { authService } from '@/lib/services'
+import { getErrorMessage } from '@/lib/runtime'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -54,10 +55,10 @@ export default function RegisterPage() {
       if (formData.type === 'agent') {
         router.push('/agent-dashboard')
       } else {
-        router.push('/map')
+        router.push('/app/map')
       }
-    } catch (err: any) {
-      setError(err.message || 'Erro ao registrar')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao registrar'))
       setLoading(false)
     }
   }

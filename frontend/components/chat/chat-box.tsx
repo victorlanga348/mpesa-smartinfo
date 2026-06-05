@@ -42,17 +42,19 @@ export function ChatBox({ agentId, agentName, onPing }: ChatBoxProps) {
   const [inputText, setInputText] = useState('')
   const [loading, setLoading] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const user = getCurrentUser()
+  const [user, setUser] = useState<ReturnType<typeof getCurrentUser>>(null)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   useEffect(() => {
-    if (!user) return
-    setMessages(readMessages(user.id, agentId))
+    const currentUser = getCurrentUser()
+    setUser(currentUser)
+    if (!currentUser) return
+    setMessages(readMessages(currentUser.id, agentId))
     setLoading(false)
-  }, [agentId, user?.id])
+  }, [agentId])
 
   useEffect(() => {
     scrollToBottom()

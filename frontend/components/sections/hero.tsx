@@ -58,7 +58,7 @@ export function HeroSection() {
               className="flex flex-col gap-4 sm:flex-row"
             >
               <Button asChild className="h-12 rounded-full bg-primary px-8 text-base font-bold text-white shadow-lg shadow-red-600/20 hover:bg-red-700">
-                <Link href="/map">
+                <Link href="/app/map">
                   Procurar agente
                   <ArrowRight className="h-5 w-5" />
                 </Link>

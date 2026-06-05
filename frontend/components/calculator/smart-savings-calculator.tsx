@@ -85,7 +85,7 @@ export function SmartSavingsCalculator({ embedded = false }: { embedded?: boolea
       {!embedded && (
       <header className="sticky top-0 z-40 border-b border-red-100/70 bg-white/90 p-4 backdrop-blur-xl">
         <div className="mx-auto flex max-w-md items-center gap-4">
-          <Link href="/map">
+          <Link href="/app/map">
             <button className="grid h-10 w-10 place-items-center rounded-full border border-gray-200 bg-white shadow-sm transition-colors hover:bg-red-50">
               <ArrowLeft className="h-5 w-5 text-[#4A4A4A]" />
             </button>

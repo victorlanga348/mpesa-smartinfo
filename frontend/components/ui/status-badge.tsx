@@ -10,7 +10,13 @@ const statusBadgeVariants = cva('inline-flex items-center gap-2 px-3 py-1 rounde
       offline: 'bg-gray-100 text-gray-800',
       busy: 'bg-yellow-100 text-yellow-800',
       pending: 'bg-blue-100 text-blue-800',
+      accepted: 'bg-blue-100 text-blue-800',
+      confirmed: 'bg-blue-100 text-blue-800',
+      waiting_list: 'bg-purple-100 text-purple-800',
+      arrived: 'bg-green-100 text-green-800',
+      in_service: 'bg-yellow-100 text-yellow-800',
       completed: 'bg-green-100 text-green-800',
+      rejected: 'bg-red-100 text-red-800',
       cancelled: 'bg-red-100 text-red-800',
     },
   },
@@ -21,6 +27,7 @@ const statusBadgeVariants = cva('inline-flex items-center gap-2 px-3 py-1 rounde
 
 export interface StatusBadgeProps extends VariantProps<typeof statusBadgeVariants> {
   showDot?: boolean
+  className?: string
 }
 
 export function StatusBadge({ status, showDot = true, className }: StatusBadgeProps) {
@@ -29,7 +36,13 @@ export function StatusBadge({ status, showDot = true, className }: StatusBadgePr
     offline: 'bg-gray-400',
     busy: 'bg-yellow-500',
     pending: 'bg-blue-500',
+    accepted: 'bg-blue-500',
+    confirmed: 'bg-blue-500',
+    waiting_list: 'bg-purple-500',
+    arrived: 'bg-green-500',
+    in_service: 'bg-yellow-500',
     completed: 'bg-green-500',
+    rejected: 'bg-red-500',
     cancelled: 'bg-red-500',
   }
 
@@ -38,7 +51,13 @@ export function StatusBadge({ status, showDot = true, className }: StatusBadgePr
     offline: 'Offline',
     busy: 'Ocupado',
     pending: 'Pendente',
+    accepted: 'Aceite',
+    confirmed: 'Confirmado',
+    waiting_list: 'Lista de espera',
+    arrived: 'Chegou',
+    in_service: 'Em atendimento',
     completed: 'Completado',
+    rejected: 'Rejeitado',
     cancelled: 'Cancelado',
   }
 

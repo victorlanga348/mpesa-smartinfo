@@ -65,7 +65,7 @@ export function Navbar() {
               <Link href="/login">Entrar</Link>
             </Button>
             <Button asChild className="rounded-full bg-primary px-5 text-white shadow-md shadow-red-600/20 hover:bg-red-700">
-              <Link href="/map">Procurar agente</Link>
+              <Link href="/app/map">Procurar agente</Link>
             </Button>
           </div>
 
@@ -105,7 +105,7 @@ export function Navbar() {
                     <Link href="/login">Entrar</Link>
                   </Button>
                   <Button asChild className="rounded-full bg-primary text-white hover:bg-red-700">
-                    <Link href="/map">Procurar</Link>
+                    <Link href="/app/map">Procurar</Link>
                   </Button>
                 </div>
               </div>

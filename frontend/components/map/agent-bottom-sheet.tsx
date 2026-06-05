@@ -2,11 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, MessageCircle, MapPin, Star, Zap } from 'lucide-react'
-import { Agent, Request } from '@/lib/types'
+import { X, MapPin, Star, Zap } from 'lucide-react'
+import { Agent, AgentRating, ApiPing, LocalRequest, Request, Reservation, StoredUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { agentService, requestService, reservationService } from '@/lib/services'
+import { agentService, authService, requestService, reservationService } from '@/lib/services'
 import { useSocket } from '@/hooks/use-socket'
+import { toast } from '@/hooks/use-toast'
+import { getApiUrl } from '@/lib/socket'
+import { getErrorMessage, parseJson } from '@/lib/runtime'
 
 export function AgentBottomSheet({
   agent,
@@ -17,36 +20,44 @@ export function AgentBottomSheet({
   agent: Agent | null
   isOpen: boolean
   onClose: () => void
-  onRequestCreated?: (request: Request) => void
+  onRequestCreated?: (request: LocalRequest) => void
 }) {
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'select' | 'confirm' | 'reserved' | 'rating'>('select')
   const [waitMinutes, setWaitMinutes] = useState(10)
-  const [reservation, setReservation] = useState<any>(null)
+  const [reservation, setReservation] = useState<Reservation | null>(null)
   const [operationType, setOperationType] = useState<'withdrawal' | 'deposit'>('withdrawal')
   const [amount, setAmount] = useState<number>(1000)
-  const [currentRequest, setCurrentRequest] = useState<any>(null)
+  const [currentRequest, setCurrentRequest] = useState<LocalRequest | null>(null)
   const [rating, setRating] = useState(5)
   const [alreadyRated, setAlreadyRated] = useState(false)
   const { socket } = useSocket()
 
-  const getUser = () => JSON.parse(localStorage.getItem('smartinfo_user') || '{}')
+  const getUser = () => parseJson<StoredUser>(localStorage.getItem('smartinfo_user'), {})
 
-  const getRatings = () => {
-    const stored = localStorage.getItem('smartinfo_agent_ratings')
-    return stored ? JSON.parse(stored) : []
+  const ensureClientSession = async (): Promise<StoredUser> => {
+    const existing = getUser()
+    if (existing?.token && existing.role === 'customer' && !existing.token.startsWith('demo-token')) return existing
+
+    const name = existing?.name || `Cliente ${Date.now().toString().slice(-6)}`
+    const data = await authService.registerClient(name, existing?.phone)
+    const user = { ...data.user, token: data.token, role: 'customer' as const, type: 'customer' as const }
+    localStorage.setItem('smartinfo_user', JSON.stringify(user))
+    return user
   }
+
+  const getRatings = () => parseJson<AgentRating[]>(localStorage.getItem('smartinfo_agent_ratings'), [])
 
   const hasRatedAgent = (agentId: string) => {
     const user = getUser()
-    return getRatings().some((item: any) => item.agentId === agentId && item.userId === user.id)
+    return getRatings().some((item) => item.agentId === agentId && item.userId === user.id)
   }
 
   const saveRating = () => {
     if (!agent) return
     const user = getUser()
     const ratings = getRatings()
-    if (ratings.some((item: any) => item.agentId === agent.id && item.userId === user.id)) {
+    if (ratings.some((item) => item.agentId === agent.id && item.userId === user.id)) {
       setAlreadyRated(true)
       return
     }
@@ -66,16 +77,15 @@ export function AgentBottomSheet({
     setAlreadyRated(true)
   }
 
-  const saveLocalRequest = (request: any) => {
-    const stored = localStorage.getItem('smartinfo_requests')
-    const requests = stored ? JSON.parse(stored) : []
-    const user = JSON.parse(localStorage.getItem('smartinfo_user') || '{}')
-    const nextRequest = {
+  const saveLocalRequest = (request: Partial<ApiPing>): LocalRequest => {
+    const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
+    const user = parseJson<StoredUser>(localStorage.getItem('smartinfo_user'), {})
+    const nextRequest: LocalRequest = {
       id: request.id || `req-${Date.now()}`,
       customerId: user.id || `customer-${Date.now()}`,
       customerName: user.name || 'Cliente',
       customerPhone: user.phone || '',
-      agentId: agent?.id,
+      agentId: agent?.id || request.agentId || '',
       agentName: agent?.name,
       type: operationType,
       amount,
@@ -88,40 +98,92 @@ export function AgentBottomSheet({
     return nextRequest
   }
 
-  const normalizeRequestStatus = (status?: string) => {
+  const normalizeRequestStatus = (status?: string): LocalRequest['status'] => {
     const normalized = String(status || '').toUpperCase()
     if (normalized === 'ACCEPTED') return 'accepted'
-    if (normalized === 'ON_MY_WAY') return 'customer_on_way'
+    if (normalized === 'WAITING_LIST') return 'waiting_list'
+    if (normalized === 'ARRIVED') return 'arrived'
+    if (normalized === 'IN_SERVICE' || normalized === 'ON_MY_WAY') return 'in_service'
     if (normalized === 'COMPLETED') return 'completed'
-    if (normalized === 'EXPIRED') return 'rejected'
+    if (normalized === 'CANCELLED') return 'cancelled'
+    if (normalized === 'REJECTED' || normalized === 'EXPIRED') return 'rejected'
     return 'pending'
   }
 
-  const updateLocalRequest = (id: string, changes: Record<string, any>) => {
-    const stored = localStorage.getItem('smartinfo_requests')
-    const requests = stored ? JSON.parse(stored) : []
-    const updated = requests.map((request: any) => request.id === id ? { ...request, ...changes } : request)
+  const buildReservationFromPing = (ping: ApiPing): Reservation => {
+    const expiresAt = ping.reservationExpires
+      ? new Date(ping.reservationExpires)
+      : new Date(Date.now() + waitMinutes * 60 * 1000)
+
+    return {
+      id: ping.id,
+      requestId: ping.id,
+      agentId: ping.agentId || agent?.id || '',
+      customerId: ping.userId || getUser().id || '',
+      eta: waitMinutes,
+      pickupReference: ping.reservationToken || `MPESA-${String(ping.id || Date.now()).slice(-6)}`,
+      status: normalizeRequestStatus(ping.status) === 'completed' ? 'completed' : 'active',
+      expiresAt,
+      createdAt: ping.createdAt ? new Date(ping.createdAt) : new Date(),
+    }
+  }
+
+  const applyPingUpdate = (ping: ApiPing) => {
+    if (!currentRequest?.id || ping.id !== currentRequest.id) return
+
+    const status = normalizeRequestStatus(ping.status)
+    const updated = updateLocalRequest(currentRequest.id, { status })
+    setCurrentRequest(updated || { ...currentRequest, status })
+
+    if (status === 'accepted' || status === 'waiting_list' || status === 'arrived' || status === 'in_service') {
+      setReservation(buildReservationFromPing(ping))
+      setStep('reserved')
+    }
+
+    if (status === 'accepted' || status === 'waiting_list') {
+      toast({
+        title: 'Agente confirmou',
+        description: 'O agente aceitou o seu pedido.',
+      })
+    }
+
+    if (status === 'arrived') {
+      toast({
+        title: 'Chegada registada',
+        description: 'O agente foi avisado que voce chegou.',
+      })
+    }
+
+    if (status === 'completed') {
+      toast({
+        title: 'Atendimento finalizado',
+        description: 'O agente finalizou o atendimento.',
+      })
+    }
+  }
+
+  const updateLocalRequest = (id: string, changes: Partial<LocalRequest>) => {
+    const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
+    const updated = requests.map((request) => request.id === id ? { ...request, ...changes } : request)
     localStorage.setItem('smartinfo_requests', JSON.stringify(updated))
-    return updated.find((request: any) => request.id === id)
+    return updated.find((request) => request.id === id)
   }
 
   const removeLocalRequest = (id: string) => {
-    const stored = localStorage.getItem('smartinfo_requests')
-    const requests = stored ? JSON.parse(stored) : []
-    localStorage.setItem('smartinfo_requests', JSON.stringify(requests.filter((request: any) => request.id !== id)))
+    const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
+    localStorage.setItem('smartinfo_requests', JSON.stringify(requests.filter((request) => request.id !== id)))
   }
 
   useEffect(() => {
     if (!currentRequest?.id || step !== 'reserved') return
 
     const timer = window.setInterval(() => {
-      const stored = localStorage.getItem('smartinfo_requests')
-      const requests = stored ? JSON.parse(stored) : []
-      const updated = requests.find((request: any) => request.id === currentRequest.id)
+      const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
+      const updated = requests.find((request) => request.id === currentRequest.id)
       if (updated) {
         setCurrentRequest(updated)
       } else {
-        setCurrentRequest((request: any) => request ? { ...request, status: 'rejected' } : request)
+        setCurrentRequest((request) => request ? { ...request, status: 'rejected' } : request)
       }
     }, 1000)
 
@@ -132,36 +194,69 @@ export function AgentBottomSheet({
     const user = getUser()
     if (user?.id) socket.emit('join:client', user.id)
 
-    const handleAccepted = (ping: any) => {
+    const handleAccepted = (ping: ApiPing) => {
       if (!currentRequest?.id || ping.id !== currentRequest.id) return
-      const updated = updateLocalRequest(currentRequest.id, { status: 'accepted' })
-      setCurrentRequest(updated || { ...currentRequest, status: 'accepted' })
+      applyPingUpdate({ ...ping, status: ping.status || 'ACCEPTED' })
     }
 
-    const handleRejected = (ping: any) => {
+    const handleRejected = (ping: ApiPing) => {
       if (!currentRequest?.id || ping.id !== currentRequest.id) return
       const updated = updateLocalRequest(currentRequest.id, { status: 'rejected' })
       setCurrentRequest(updated || { ...currentRequest, status: 'rejected' })
+      toast({
+        title: 'Pedido negado',
+        description: 'O agente negou o seu pedido. Escolha outro agente disponivel.',
+      })
     }
 
     socket.on('ping:accepted', handleAccepted)
+    socket.on('ping:waiting-list', applyPingUpdate)
+    socket.on('ping:in-service', applyPingUpdate)
+    socket.on('ping:arrived', applyPingUpdate)
+    socket.on('ping:cancelled', applyPingUpdate)
+    socket.on('ping:completed', applyPingUpdate)
     socket.on('ping:rejected', handleRejected)
     socket.on('ping:expired', handleRejected)
 
     return () => {
       socket.off('ping:accepted', handleAccepted)
+      socket.off('ping:waiting-list', applyPingUpdate)
+      socket.off('ping:in-service', applyPingUpdate)
+      socket.off('ping:arrived', applyPingUpdate)
+      socket.off('ping:cancelled', applyPingUpdate)
+      socket.off('ping:completed', applyPingUpdate)
       socket.off('ping:rejected', handleRejected)
       socket.off('ping:expired', handleRejected)
     }
-  }, [currentRequest, socket])
+  }, [agent, currentRequest, socket, waitMinutes])
+
+  useEffect(() => {
+    if (!currentRequest?.id) return
+
+    const syncRequest = async () => {
+      try {
+        const response = await fetch(`${getApiUrl()}/ping/${currentRequest.id}`)
+        if (!response.ok) return
+        const ping = await response.json()
+        applyPingUpdate(ping)
+      } catch (error) {
+        console.error('Failed to sync request status:', error)
+      }
+    }
+
+    const interval = window.setInterval(syncRequest, 35000)
+    syncRequest().catch(() => null)
+
+    return () => window.clearInterval(interval)
+  }, [currentRequest?.id, currentRequest?.status])
 
   const handlePingAgent = async () => {
     if (!agent) return
 
     setLoading(true)
     try {
-      const storedLocation = localStorage.getItem('smartinfo_client_location')
-      const clientLocation = storedLocation ? JSON.parse(storedLocation) : null
+      await ensureClientSession()
+      const clientLocation = parseJson<{ latitude?: number; longitude?: number } | null>(localStorage.getItem('smartinfo_client_location'), null)
       const result = await agentService.pingAgent(
         agent.id,
         amount,
@@ -173,8 +268,19 @@ export function AgentBottomSheet({
       setCurrentRequest(localRequest)
       setWaitMinutes(10)
       setStep('confirm')
-    } catch (error: any) {
-      alert(error.response?.data?.error || 'Erro ao consultar o agente. Verifique se o servidor está ativo.')
+      toast({
+        title: 'Pedido enviado',
+        description: 'Aguardando confirmacao do agente.',
+      })
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Erro ao consultar o agente. Verifique se o servidor esta ativo.')
+      if (message.toLowerCase().includes('token')) {
+        localStorage.removeItem('smartinfo_user')
+        alert('Sessao expirada ou invalida. Entre novamente como cliente.')
+        window.location.href = '/auth'
+      } else {
+        alert(message)
+      }
     } finally {
       setLoading(false)
     }
@@ -185,18 +291,19 @@ export function AgentBottomSheet({
 
     setLoading(true)
     try {
-      const user = JSON.parse(localStorage.getItem('smartinfo_user') || '{}')
-      const request = currentRequest || await requestService.createRequest(user.id, agent.id, operationType, amount)
+      const user = await ensureClientSession()
+      const userId = user.id || `customer-${Date.now()}`
+      const request = currentRequest || await requestService.createRequest(userId, agent.id, operationType, amount)
       const localRequest = currentRequest || saveLocalRequest(request)
       const queuedRequest = updateLocalRequest(localRequest.id, {
-        status: 'pending',
+        status: localRequest.status === 'waiting_list' ? 'waiting_list' : 'pending',
         waitMinutes,
         amount,
         type: operationType,
       }) || localRequest
 
       const res = await reservationService.createReservation(
-        user.id,
+        userId,
         agent.id,
         queuedRequest.id,
         waitMinutes
@@ -206,7 +313,7 @@ export function AgentBottomSheet({
       setStep('reserved')
       setCurrentRequest(queuedRequest)
       onRequestCreated?.(queuedRequest)
-    } catch (error: any) {
+    } catch (error: unknown) {
       alert('Erro ao criar reserva.')
     } finally {
       setLoading(false)
@@ -219,35 +326,25 @@ export function AgentBottomSheet({
     onClose()
   }
 
-  const handleArrived = () => {
-    const completeArrival = async () => {
-      if (currentRequest?.id) {
-        await requestService.updatePingStatus(currentRequest.id, 'COMPLETED')
-        removeLocalRequest(currentRequest.id)
-      }
-      setAlreadyRated(agent ? hasRatedAgent(agent.id) : false)
-      setStep('rating')
-    }
-
-    completeArrival().catch(() => {
-      if (currentRequest?.id) removeLocalRequest(currentRequest.id)
-      setAlreadyRated(agent ? hasRatedAgent(agent.id) : false)
-      setStep('rating')
-    })
+  const handleMarkArrived = () => {
+    if (!currentRequest?.id) return
+    requestService.markArrived(currentRequest.id)
+      .then((ping) => applyPingUpdate(ping))
+      .catch((error) => alert(getErrorMessage(error, 'Nao foi possivel marcar chegada.')))
   }
 
-  const handleConfirmComing = () => {
+  const handleCancelRequest = () => {
     if (!currentRequest?.id) return
-    requestService.updatePingStatus(currentRequest.id, 'ON_MY_WAY').catch(() => null)
-    const updated = updateLocalRequest(currentRequest.id, { status: 'customer_on_way' })
-    setCurrentRequest(updated || { ...currentRequest, status: 'customer_on_way' })
+    requestService.cancelPing(currentRequest.id)
+      .then((ping) => applyPingUpdate(ping))
+      .catch((error) => alert(getErrorMessage(error, 'Nao foi possivel cancelar o pedido.')))
   }
 
   if (!agent) return null
 
-  const agentRatings = getRatings().filter((item: any) => item.agentId === agent.id)
+  const agentRatings = getRatings().filter((item) => item.agentId === agent.id)
   const agentAverageRating = agentRatings.length > 0
-    ? agentRatings.reduce((sum: number, item: any) => sum + Number(item.rating || 0), 0) / agentRatings.length
+    ? agentRatings.reduce((sum, item) => sum + Number(item.rating || 0), 0) / agentRatings.length
     : agent.rating
   const agentBadge = agentAverageRating >= 4.8
     ? 'Agente de excelencia'
@@ -395,14 +492,6 @@ export function AgentBottomSheet({
                     >
                       {loading ? 'Verificando...' : 'Perguntar Disponibilidade'}
                     </Button>
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => { window.location.href = `/app/chat/${agent.id}` }}
-                    >
-                      <MessageCircle className="w-4 h-4 mr-2" />
-                      Enviar mensagem
-                    </Button>
                   </div>
                 </motion.div>
               )}
@@ -413,7 +502,49 @@ export function AgentBottomSheet({
                   animate={{ opacity: 1 }}
                   className="space-y-6"
                 >
-                  <h3 className="text-xl font-bold text-gray-900">Confirmar {operationType === 'withdrawal' ? 'Levantamento' : 'Depósito'}</h3>
+                  <h3 className="text-xl font-bold text-gray-900">
+                    {currentRequest?.status === 'accepted'
+                      ? 'Pedido aceite'
+                      : currentRequest?.status === 'waiting_list'
+                        ? 'Agente confirmou'
+                        : currentRequest?.status === 'rejected'
+                          ? 'Pedido negado'
+                          : currentRequest?.status === 'cancelled'
+                            ? 'Pedido cancelado'
+                            : currentRequest?.status === 'completed'
+                              ? 'Atendimento finalizado'
+                              : `Confirmar ${operationType === 'withdrawal' ? 'Levantamento' : 'Depósito'}`}
+                  </h3>
+
+                  {currentRequest?.status === 'pending' && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-medium text-blue-800">
+                      Pedido enviado. Aguardando confirmacao do agente.
+                    </div>
+                  )}
+
+                  {(currentRequest?.status === 'accepted' || currentRequest?.status === 'waiting_list') && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">
+                      O agente aceitou o seu pedido. Voce esta na lista de espera.
+                    </div>
+                  )}
+
+                  {currentRequest?.status === 'rejected' && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800">
+                      O agente negou o seu pedido. Escolha outro agente disponivel.
+                    </div>
+                  )}
+
+                  {currentRequest?.status === 'cancelled' && (
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm font-medium text-gray-800">
+                      O seu pedido foi cancelado.
+                    </div>
+                  )}
+
+                  {currentRequest?.status === 'completed' && (
+                    <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm font-medium text-green-800">
+                      O atendimento foi finalizado pelo agente.
+                    </div>
+                  )}
 
                   <div className="bg-blue-50 rounded-lg p-4 border border-blue-200 space-y-3">
                     <div className="flex justify-between">
@@ -500,7 +631,11 @@ export function AgentBottomSheet({
                       disabled={loading}
                       className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3"
                     >
-                      {loading ? 'Enviando pedido...' : 'Enviar pedido ao agente'}
+                      {loading
+                        ? 'Enviando pedido...'
+                        : currentRequest?.status === 'accepted' || currentRequest?.status === 'waiting_list'
+                          ? 'Confirmar lista de espera'
+                          : 'Enviar pedido ao agente'}
                     </Button>
                     <Button
                       variant="outline"
@@ -531,18 +666,32 @@ export function AgentBottomSheet({
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">
                       {currentRequest?.status === 'accepted'
-                        ? 'Agente aceitou o pedido'
-                        : currentRequest?.status === 'customer_on_way'
-                          ? 'Voce confirmou que esta a caminho'
+                        ? 'Pedido aceite'
+                        : currentRequest?.status === 'waiting_list'
+                        ? 'Voce esta na lista de espera'
+                        : currentRequest?.status === 'arrived'
+                          ? 'Chegada registada'
+                          : currentRequest?.status === 'completed'
+                            ? 'Atendimento finalizado'
+                            : currentRequest?.status === 'cancelled'
+                              ? 'Pedido cancelado'
+                          : currentRequest?.status === 'customer_on_way'
+                            ? 'Voce confirmou que esta a caminho'
                           : currentRequest?.status === 'rejected'
                             ? 'Pedido recusado'
                             : 'Aguardando confirmacao do agente'}
                     </h3>
                     <p className="text-gray-600 mt-2">
-                      {currentRequest?.status === 'accepted'
-                        ? 'Agora confirme se vai se deslocar ate ao agente.'
-                        : currentRequest?.status === 'customer_on_way'
-                          ? 'Quando chegar ao agente, toque em Cheguei.'
+                      {currentRequest?.status === 'accepted' || currentRequest?.status === 'waiting_list'
+                        ? 'O agente aceitou o seu pedido. Voce esta na lista de espera.'
+                        : currentRequest?.status === 'arrived'
+                          ? 'Voce marcou que chegou. Aguarde o atendimento do agente.'
+                          : currentRequest?.status === 'completed'
+                            ? 'O atendimento foi finalizado pelo agente.'
+                            : currentRequest?.status === 'cancelled'
+                              ? 'O seu pedido foi cancelado.'
+                          : currentRequest?.status === 'customer_on_way'
+                            ? 'Quando chegar ao agente, toque em Cheguei.'
                           : currentRequest?.status === 'rejected'
                             ? 'Escolha outro agente disponivel na zona.'
                             : 'O agente precisa aceitar antes de voce dizer que esta a vir.'}
@@ -571,20 +720,26 @@ export function AgentBottomSheet({
                   </p>
 
                   <div className="space-y-3 pt-4">
-                    {currentRequest?.status === 'accepted' && (
+                    {(currentRequest?.status === 'accepted' || currentRequest?.status === 'waiting_list') && (
                       <Button
-                        onClick={handleConfirmComing}
+                        onClick={handleMarkArrived}
                         className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3"
                       >
-                        Estou a vir
+                        Marcar cheguei
                       </Button>
                     )}
-                    {currentRequest?.status === 'customer_on_way' && (
+                    {(currentRequest?.status === 'pending' || currentRequest?.status === 'accepted' || currentRequest?.status === 'waiting_list') && (
                       <Button
-                        onClick={handleArrived}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3"
+                        onClick={handleCancelRequest}
+                        variant="outline"
+                        className="w-full border-red-200 text-red-700 hover:bg-red-50"
                       >
-                        Cheguei
+                        Cancelar pedido
+                      </Button>
+                    )}
+                    {currentRequest?.status === 'arrived' && (
+                      <Button disabled className="w-full bg-green-100 text-green-800 font-semibold py-3">
+                        Chegada registada
                       </Button>
                     )}
                     {currentRequest?.status === 'pending' && (
@@ -597,14 +752,6 @@ export function AgentBottomSheet({
                         Escolher outro agente
                       </Button>
                     )}
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => { window.location.href = `/app/chat/${agent.id}` }}
-                    >
-                      <MessageCircle className="w-4 h-4 mr-2" />
-                      Conversar com agente
-                    </Button>
                   </div>
                 </motion.div>
               )}

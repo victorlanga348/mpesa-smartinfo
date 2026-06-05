@@ -28,10 +28,12 @@ export interface Agent {
 export interface Request {
   id: string
   customerId: string
+  customerName?: string
+  customerPhone?: string
   agentId: string
   type: 'withdrawal' | 'deposit' | 'payment' | 'info'
   amount?: number
-  status: 'pending' | 'confirmed' | 'completed' | 'cancelled'
+  status: 'pending' | 'accepted' | 'waiting_list' | 'arrived' | 'in_service' | 'completed' | 'rejected' | 'cancelled'
   createdAt: Date
   confirmedAt?: Date
   completedAt?: Date
@@ -76,4 +78,83 @@ export interface AdminMetrics {
   avgResponseTime: number
   activeZones: CriticalZone[]
   requestsByType: Record<string, number>
+}
+
+export interface StoredUser {
+  id?: string
+  name?: string
+  phone?: string
+  email?: string
+  role?: 'customer' | 'agent' | 'admin' | 'user'
+  type?: 'customer' | 'agent' | 'admin'
+  token?: string
+}
+
+export interface ApiAgent {
+  id: string
+  name?: string | null
+  phone?: string | null
+  latitude?: number | string | null
+  longitude?: number | string | null
+  status?: string | null
+  reference?: string | null
+  updatedAt?: string
+}
+
+export interface ApiPing {
+  id: string
+  userId?: string
+  user?: {
+    id?: string
+    name?: string | null
+    phone?: string | null
+  }
+  agentId?: string
+  amount?: number
+  operationType?: Request['type'] | string
+  status?: string
+  reservationToken?: string | null
+  reservationExpires?: string | null
+  createdAt?: string
+  error?: string
+}
+
+export interface AgentRating {
+  id: string
+  agentId: string
+  agentName?: string
+  userId?: string
+  userName?: string
+  rating: number
+  createdAt: string
+}
+
+export interface LocalRequest extends Omit<Request, 'createdAt' | 'status'> {
+  createdAt: string | Date
+  customerName?: string
+  customerPhone?: string
+  agentName?: string
+  waitMinutes?: number | null
+  status: Request['status'] | 'customer_on_way' | 'arrived'
+}
+
+export interface ConversationSummary {
+  id: string
+  lastMessage: string
+  timestamp: string | Date
+  unread: boolean
+}
+
+export interface AgentPerformance {
+  id: string
+  name: string
+  rating: number
+  totalRequests: number
+  avgResponseTime: number
+  status: Agent['status']
+  balance?: number
+}
+
+export interface ApiErrorBody {
+  error?: string
 }

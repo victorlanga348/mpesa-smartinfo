@@ -4,8 +4,6 @@ import { AgentStatus } from '../types';
 
 export function setupPingSockets(io: Server) {
   io.on('connection', (socket: Socket) => {
-    console.log(`Socket conectado: ${socket.id}`);
-
     socket.on('join:map', () => {
       socket.join('map');
     });
@@ -60,10 +58,6 @@ export function setupPingSockets(io: Server) {
     socket.on('temporary-agent:available', (payload) => {
       io.to('map').emit('temporary-agent:available', payload);
       io.to('admin').emit('temporary-agent:available', payload);
-    });
-
-    socket.on('disconnect', () => {
-      console.log(`Socket desconectado: ${socket.id}`);
     });
   });
 }

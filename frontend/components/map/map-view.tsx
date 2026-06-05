@@ -5,7 +5,7 @@ import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-le
 import L from 'leaflet'
 import { motion } from 'framer-motion'
 import { LocateFixed, MapPin, Search, Sparkles, X } from 'lucide-react'
-import { Agent, CriticalZone } from '@/lib/types'
+import { Agent, AgentRating, CriticalZone } from '@/lib/types'
 import { agentService } from '@/lib/services'
 import { CRITICAL_ZONES, MAPUTO_CENTER } from '@/lib/mock-data'
 
@@ -94,13 +94,13 @@ function getAgentRating(agent: Agent) {
   }
 
   const stored = localStorage.getItem('smartinfo_agent_ratings')
-  const ratings = stored ? JSON.parse(stored) : []
-  const agentRatings = ratings.filter((item: any) => item.agentId === agent.id)
+  const ratings = stored ? JSON.parse(stored) as AgentRating[] : []
+  const agentRatings = ratings.filter((item) => item.agentId === agent.id)
   if (agentRatings.length === 0) {
     return { rating: agent.rating, count: 0, badge: agent.rating >= 4.8 ? 'Agente destaque' : '' }
   }
 
-  const average = agentRatings.reduce((sum: number, item: any) => sum + Number(item.rating || 0), 0) / agentRatings.length
+  const average = agentRatings.reduce((sum, item) => sum + Number(item.rating || 0), 0) / agentRatings.length
   const badge = average >= 4.8 ? 'Agente de excelencia' : average >= 4.5 ? 'Muito bem avaliado' : ''
   return { rating: average, count: agentRatings.length, badge }
 }

@@ -1,6 +1,7 @@
-import { AdminMetrics, Request } from '../types'
+import { AdminMetrics, Request, AgentPerformance } from '../types'
 import { MOCK_AGENTS, CRITICAL_ZONES } from '../mock-data'
 import { authHeaders, getApiUrl } from '@/lib/socket'
+import { parseJson } from '@/lib/runtime'
 
 export const adminService = {
   // Get admin metrics
@@ -37,7 +38,7 @@ export const adminService = {
     const storedRequests = localStorage.getItem('smartinfo_requests')
     if (storedRequests) {
       try {
-        allRequests.push(...JSON.parse(storedRequests))
+        allRequests.push(...parseJson<Request[]>(storedRequests, []))
       } catch (e) {
         console.error('Failed to parse requests', e)
       }
@@ -78,7 +79,7 @@ export const adminService = {
   },
 
   // Get agent performance report
-  async getAgentPerformance(): Promise<any[]> {
+  async getAgentPerformance(): Promise<AgentPerformance[]> {
     await new Promise((resolve) => setTimeout(resolve, 200))
 
     return MOCK_AGENTS.map((agent) => ({
@@ -111,7 +112,7 @@ export const adminService = {
     const stored = localStorage.getItem('smartinfo_users')
     if (stored) {
       try {
-        return JSON.parse(stored).length
+        return parseJson<unknown[]>(stored, []).length
       } catch (e) {
         return 0
       }

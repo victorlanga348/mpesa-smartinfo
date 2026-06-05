@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { authService } from '@/lib/services'
+import { getErrorMessage } from '@/lib/runtime'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -18,8 +19,8 @@ export default function LoginPage() {
   const [clientPhone, setClientPhone] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
-  const [agentPhone, setAgentPhone] = useState('')
-  const [agentPassword, setAgentPassword] = useState('')
+  const [agentName, setAgentName] = useState('')
+  const [agentCode, setAgentCode] = useState('')
 
   const handleClientLogin = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -27,11 +28,11 @@ export default function LoginPage() {
     setError('')
 
     try {
-      if (!clientName || !clientPhone) throw new Error('Preencha o nome e o numero M-Pesa.')
-      await authService.loginClient(clientName, clientPhone)
+      if (!clientName || !clientPhone) throw new Error('Preencha o nome e o numero.')
+      await authService.registerClient(clientName, clientPhone)
       router.push('/app/map')
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message || 'Erro ao entrar.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao entrar.'))
       setLoading(false)
     }
   }
@@ -45,8 +46,8 @@ export default function LoginPage() {
       if (!adminEmail || !adminPassword) throw new Error('Preencha o email e a palavra-passe.')
       await authService.loginAdmin(adminEmail, adminPassword)
       router.push('/app/admin-dashboard')
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message || 'Erro ao entrar.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao entrar.'))
       setLoading(false)
     }
   }
@@ -57,11 +58,11 @@ export default function LoginPage() {
     setError('')
 
     try {
-      if (!agentPhone || !agentPassword) throw new Error('Preencha telefone e palavra-passe do agente.')
-      await authService.loginAgent(agentPhone, agentPassword)
+      if (!agentName || !agentCode) throw new Error('Preencha o nome e o codigo do agente.')
+      await authService.loginAgent(agentName, agentCode)
       router.push('/app/agent-dashboard')
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message || 'Erro ao entrar.')
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Erro ao entrar.'))
       setLoading(false)
     }
   }
@@ -110,7 +111,7 @@ export default function LoginPage() {
             <AccessFormError error={error} active={activeTab === 'customer'} />
             <form onSubmit={handleClientLogin} className="space-y-4">
               <Field label="Nome" value={clientName} onChange={setClientName} placeholder="Nome registado" />
-              <Field label="Numero M-Pesa" value={clientPhone} onChange={setClientPhone} placeholder="84 xxx xxxx" type="tel" />
+              <Field label="Numero" value={clientPhone} onChange={setClientPhone} placeholder="84 xxx xxxx" type="tel" />
               <SubmitButton loading={loading} />
             </form>
           </TabsContent>
@@ -118,8 +119,8 @@ export default function LoginPage() {
           <TabsContent value="agent">
             <AccessFormError error={error} active={activeTab === 'agent'} />
             <form onSubmit={handleAgentLogin} className="space-y-4">
-              <Field label="Telefone do agente" value={agentPhone} onChange={setAgentPhone} placeholder="84 xxx xxxx" type="tel" />
-              <Field label="Palavra-passe" value={agentPassword} onChange={setAgentPassword} placeholder="Palavra-passe" type="password" />
+              <Field label="Nome do agente" value={agentName} onChange={setAgentName} placeholder="Nome registado" />
+              <Field label="Codigo do agente" value={agentCode} onChange={setAgentCode} placeholder="Codigo recebido" type="password" />
               <SubmitButton loading={loading} />
             </form>
           </TabsContent>

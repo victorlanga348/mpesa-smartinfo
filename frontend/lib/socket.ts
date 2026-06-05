@@ -43,7 +43,7 @@ export function getSocket() {
   return socket
 }
 
-export function authHeaders() {
+export function authHeaders(): Record<string, string> {
   if (typeof window === 'undefined') return {}
 
   const stored = localStorage.getItem('smartinfo_user')
@@ -51,7 +51,7 @@ export function authHeaders() {
 
   try {
     const user = JSON.parse(stored)
-    return user.token ? { Authorization: `Bearer ${user.token}` } : {}
+    return typeof user.token === 'string' ? { Authorization: `Bearer ${user.token}` } : {}
   } catch {
     return {}
   }

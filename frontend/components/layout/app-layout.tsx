@@ -23,19 +23,13 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   const navLinks = user.role === 'agent' ? [
     { href: '/app/agent-dashboard', label: 'Meu Painel' },
-    { href: '/app/requests', label: 'Solicitações' },
-    { href: '/app/messages', label: 'Mensagens' },
   ] : user.role === 'admin' ? [
     { href: '/app/admin-dashboard', label: 'Painel Admin' },
     { href: '/app/analytics', label: 'Analíticas' },
     { href: '/app/zones', label: 'Zonas Críticas' },
   ] : [
     { href: '/app/map', label: 'Encontrar Agentes' },
-    { href: '/app/messages', label: 'Mensagens' },
-    { href: '/app/calculator', label: 'Calculadora' },
   ]
-
-  const navLinksWithHelp = [...navLinks, { href: '/app/help', label: 'Ajuda' }]
 
   return (
     <div className="min-h-screen bg-white">
@@ -49,7 +43,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
             {/* Desktop Navigation */}
             <nav className="hidden md:flex items-center gap-1">
-              {navLinksWithHelp.map((link) => (
+              {navLinks.map((link) => (
                 <Link key={link.href} href={link.href} className="px-3 py-2 text-sm font-medium text-gray-700 hover:text-primary transition-colors">
                   {link.label}
                 </Link>
@@ -74,7 +68,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Mobile Navigation */}
           {mobileMenuOpen && (
             <nav className="md:hidden border-t border-gray-200 py-4 space-y-2">
-              {navLinksWithHelp.map((link) => (
+              {navLinks.map((link) => (
                 <Link key={link.href} href={link.href} className="block px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100">
                   {link.label}
                 </Link>

@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowRight, Shield, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { authService } from '@/lib/services'
 import { getApiUrl } from '@/lib/socket'
 
 export default function AuthPage() {
@@ -13,7 +14,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [clientName, setClientName] = useState('')
-  const [clientCode, setClientCode] = useState('')
+  const [clientPhone, setClientPhone] = useState('')
   const [adminEmail, setAdminEmail] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
   const router = useRouter()
@@ -24,18 +25,8 @@ export default function AuthPage() {
     setError('')
 
     try {
-      if (!clientName || !clientCode) throw new Error('Preencha o nome e o codigo de acesso.')
-
-      const response = await fetch(`${getApiUrl()}/user/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: clientName, code: clientCode }),
-      })
-      const data = await response.json()
-
-      if (!response.ok) throw new Error(data.error || 'Nao foi possivel entrar.')
-
-      localStorage.setItem('smartinfo_user', JSON.stringify({ ...data.user, token: data.token, type: 'customer', role: 'customer' }))
+      if (!clientName || !clientPhone) throw new Error('Preencha o nome e o numero.')
+      await authService.registerClient(clientName, clientPhone)
       router.push('/app/map')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login falhou.')
@@ -116,8 +107,8 @@ export default function AuthPage() {
                   <Input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Nome registado" required />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Codigo de acesso</label>
-                  <Input value={clientCode} onChange={(event) => setClientCode(event.target.value)} placeholder="Codigo recebido" required />
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Numero</label>
+                  <Input value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="84 xxx xxxx" required />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full bg-[#E60000] text-white hover:bg-red-700">
                   {loading ? 'A entrar...' : 'Entrar'}
