@@ -20,7 +20,10 @@ export interface Agent {
   balance?: number
   location: string
   rating: number
+  ratingCount?: number
   responseTime: number // in seconds
+  averageServiceMinutes?: number | null
+  completedServiceCount?: number
   totalRequests: number
   distanceKm?: number
 }
@@ -98,6 +101,10 @@ export interface ApiAgent {
   longitude?: number | string | null
   status?: string | null
   reference?: string | null
+  averageServiceMinutes?: number | string | null
+  completedServiceCount?: number | string | null
+  ratingAverage?: number | string | null
+  ratingCount?: number | string | null
   updatedAt?: string
 }
 

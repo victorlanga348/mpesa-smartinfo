@@ -100,6 +100,12 @@ export class AgentController {
       }
 
       const updated = await AgentService.updateReference(agentId, reference);
+      const io = req.app.get('io');
+      if (io) {
+        io.to('map').emit('agent:location-updated', updated);
+        io.to('admin').emit('admin:metrics-updated');
+        io.emit('agents:list-updated', { reason: 'reference-updated', agent: updated });
+      }
       return res.status(200).json(updated);
     } catch (error: unknown) {
       return res.status(400).json({ error: getErrorMessage(error) });

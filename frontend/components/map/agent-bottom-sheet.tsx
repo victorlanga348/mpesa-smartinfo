@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, MapPin, Star, Zap } from 'lucide-react'
-import { Agent, AgentRating, ApiPing, LocalRequest, Request, Reservation, StoredUser } from '@/lib/types'
+import { CheckCircle, X, MapPin, Star, Zap } from 'lucide-react'
+import { Agent, ApiPing, LocalRequest, Request, Reservation, StoredUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { agentService, authService, requestService, reservationService } from '@/lib/services'
 import { useSocket } from '@/hooks/use-socket'
@@ -27,7 +27,7 @@ export function AgentBottomSheet({
   const [waitMinutes, setWaitMinutes] = useState(10)
   const [reservation, setReservation] = useState<Reservation | null>(null)
   const [operationType, setOperationType] = useState<'withdrawal' | 'deposit'>('withdrawal')
-  const [amount, setAmount] = useState<number>(1000)
+  const [amount, setAmount] = useState('')
   const [currentRequest, setCurrentRequest] = useState<LocalRequest | null>(null)
   const [rating, setRating] = useState(5)
   const [alreadyRated, setAlreadyRated] = useState(false)
@@ -46,38 +46,42 @@ export function AgentBottomSheet({
     return user
   }
 
-  const getRatings = () => parseJson<AgentRating[]>(localStorage.getItem('smartinfo_agent_ratings'), [])
+  const saveRating = async () => {
+    if (!currentRequest?.id) return
 
-  const hasRatedAgent = (agentId: string) => {
-    const user = getUser()
-    return getRatings().some((item) => item.agentId === agentId && item.userId === user.id)
-  }
-
-  const saveRating = () => {
-    if (!agent) return
-    const user = getUser()
-    const ratings = getRatings()
-    if (ratings.some((item) => item.agentId === agent.id && item.userId === user.id)) {
+    try {
+      await requestService.rateAgent(currentRequest.id, rating)
       setAlreadyRated(true)
-      return
+      toast({
+        title: 'Avaliacao registada',
+        description: 'Obrigado por avaliar este atendimento.',
+      })
+    } catch (error: unknown) {
+      const message = getErrorMessage(error, 'Nao foi possivel registar a avaliacao.')
+      if (message.toLowerCase().includes('ja foi avaliado')) setAlreadyRated(true)
+      alert(message)
     }
-
-    localStorage.setItem('smartinfo_agent_ratings', JSON.stringify([
-      ...ratings,
-      {
-        id: `rating-${Date.now()}`,
-        agentId: agent.id,
-        agentName: agent.name,
-        userId: user.id,
-        userName: user.name,
-        rating,
-        createdAt: new Date().toISOString(),
-      },
-    ]))
-    setAlreadyRated(true)
   }
 
-  const saveLocalRequest = (request: Partial<ApiPing>): LocalRequest => {
+  const parseAmount = () => {
+    const normalized = amount.replace(',', '.').trim()
+    const value = Number(normalized)
+    return Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  const validateAmount = () => {
+    const value = parseAmount()
+    if (value === null) {
+      toast({
+        title: 'Valor invalido',
+        description: 'Informe um valor maior que zero antes de enviar o pedido.',
+      })
+      return null
+    }
+    return value
+  }
+
+  const saveLocalRequest = (request: Partial<ApiPing>, requestAmount: number): LocalRequest => {
     const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
     const user = parseJson<StoredUser>(localStorage.getItem('smartinfo_user'), {})
     const nextRequest: LocalRequest = {
@@ -88,7 +92,7 @@ export function AgentBottomSheet({
       agentId: agent?.id || request.agentId || '',
       agentName: agent?.name,
       type: operationType,
-      amount,
+      amount: requestAmount,
       status: 'pending',
       waitMinutes: null,
       createdAt: new Date().toISOString(),
@@ -255,16 +259,19 @@ export function AgentBottomSheet({
 
     setLoading(true)
     try {
+      const requestAmount = validateAmount()
+      if (requestAmount === null) return
+
       await ensureClientSession()
       const clientLocation = parseJson<{ latitude?: number; longitude?: number } | null>(localStorage.getItem('smartinfo_client_location'), null)
       const result = await agentService.pingAgent(
         agent.id,
-        amount,
+        requestAmount,
         operationType,
         clientLocation?.latitude ?? agent.latitude,
         clientLocation?.longitude ?? agent.longitude,
       )
-      const localRequest = saveLocalRequest(result)
+      const localRequest = saveLocalRequest(result, requestAmount)
       setCurrentRequest(localRequest)
       setWaitMinutes(10)
       setStep('confirm')
@@ -291,14 +298,17 @@ export function AgentBottomSheet({
 
     setLoading(true)
     try {
+      const requestAmount = validateAmount()
+      if (requestAmount === null) return
+
       const user = await ensureClientSession()
       const userId = user.id || `customer-${Date.now()}`
-      const request = currentRequest || await requestService.createRequest(userId, agent.id, operationType, amount)
-      const localRequest = currentRequest || saveLocalRequest(request)
+      const request = currentRequest || await requestService.createRequest(userId, agent.id, operationType, requestAmount)
+      const localRequest = currentRequest || saveLocalRequest(request, requestAmount)
       const queuedRequest = updateLocalRequest(localRequest.id, {
         status: localRequest.status === 'waiting_list' ? 'waiting_list' : 'pending',
         waitMinutes,
-        amount,
+        amount: requestAmount,
         type: operationType,
       }) || localRequest
 
@@ -342,13 +352,11 @@ export function AgentBottomSheet({
 
   if (!agent) return null
 
-  const agentRatings = getRatings().filter((item) => item.agentId === agent.id)
-  const agentAverageRating = agentRatings.length > 0
-    ? agentRatings.reduce((sum, item) => sum + Number(item.rating || 0), 0) / agentRatings.length
-    : agent.rating
-  const agentBadge = agentAverageRating >= 4.8
+  const agentAverageRating = Number(agent.rating || 0)
+  const agentRatingCount = agent.ratingCount || 0
+  const agentBadge = agentRatingCount > 0 && agentAverageRating >= 4.8
     ? 'Agente de excelencia'
-    : agentAverageRating >= 4.5
+    : agentRatingCount > 0 && agentAverageRating >= 4.5
       ? 'Muito bem avaliado'
       : ''
 
@@ -407,12 +415,18 @@ export function AgentBottomSheet({
                   <div className="grid grid-cols-3 gap-4">
                     <div className="bg-gray-50 rounded-lg p-4 text-center">
                       <Star className="w-5 h-5 text-yellow-500 mx-auto mb-2" />
-                      <p className="font-bold text-gray-900">{agentAverageRating.toFixed(1)}</p>
+                      <p className="font-bold text-gray-900">
+                        {agentRatingCount > 0 ? agentAverageRating.toFixed(1) : 'Sem dados'}
+                      </p>
                       <p className="text-xs text-gray-600">Classificação</p>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4 text-center">
                       <Zap className="w-5 h-5 text-blue-500 mx-auto mb-2" />
-                      <p className="font-bold text-gray-900">{agent.responseTime}s</p>
+                      <p className="font-bold text-gray-900">
+                        {agent.averageServiceMinutes === null || agent.averageServiceMinutes === undefined
+                          ? 'Sem dados suficientes'
+                          : `${Math.round(agent.averageServiceMinutes)} min`}
+                      </p>
                       <p className="text-xs text-gray-600">Tempo médio</p>
                     </div>
                     <div className="bg-gray-50 rounded-lg p-4 text-center">
@@ -451,22 +465,30 @@ export function AgentBottomSheet({
                         onClick={() => setOperationType('withdrawal')}
                         className={`py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
                           operationType === 'withdrawal'
-                            ? 'bg-red-50 border-red-500 text-red-600'
+                            ? 'bg-red-50 border-red-500 text-red-700'
                             : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                         }`}
+                        aria-pressed={operationType === 'withdrawal'}
                       >
-                        Levantamento
+                        <span className="inline-flex items-center justify-center gap-2">
+                          {operationType === 'withdrawal' && <CheckCircle className="h-4 w-4" />}
+                          Levantamento
+                        </span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setOperationType('deposit')}
                         className={`py-2 px-4 rounded-lg border text-sm font-medium transition-colors ${
                           operationType === 'deposit'
-                            ? 'bg-red-50 border-red-500 text-red-600'
+                            ? 'bg-green-50 border-green-600 text-green-700'
                             : 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                         }`}
+                        aria-pressed={operationType === 'deposit'}
                       >
-                        Depósito
+                        <span className="inline-flex items-center justify-center gap-2">
+                          {operationType === 'deposit' && <CheckCircle className="h-4 w-4" />}
+                          Depósito
+                        </span>
                       </button>
                     </div>
 
@@ -475,7 +497,7 @@ export function AgentBottomSheet({
                       <input
                         type="number"
                         value={amount}
-                        onChange={(e) => setAmount(Number(e.target.value))}
+                        onChange={(e) => setAmount(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:border-red-500 text-gray-900 font-semibold"
                         placeholder="Ex: 1000"
                         min="10"
@@ -752,6 +774,11 @@ export function AgentBottomSheet({
                         Escolher outro agente
                       </Button>
                     )}
+                    {currentRequest?.status === 'completed' && !alreadyRated && (
+                      <Button onClick={() => setStep('rating')} className="w-full bg-red-600 hover:bg-red-700 text-white font-semibold py-3">
+                        Avaliar agente
+                      </Button>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -765,7 +792,7 @@ export function AgentBottomSheet({
                   <div>
                     <h3 className="text-xl font-bold text-gray-900">Classificar agente</h3>
                     <p className="mt-2 text-sm text-gray-600">
-                      Cada utilizador pode avaliar este agente apenas uma vez.
+                      Cada atendimento pode ser avaliado apenas uma vez.
                     </p>
                   </div>
 

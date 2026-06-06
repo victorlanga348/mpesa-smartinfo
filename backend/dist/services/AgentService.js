@@ -35,7 +35,7 @@ class AgentService {
         if (!isValid) {
             throw new Error('Telefone ou palavra-passe incorreta.');
         }
-        const token = jsonwebtoken_1.default.sign({ id: agent.id, name: agent.name, phone: agent.phone }, JWT_SECRET, { expiresIn: '24h' });
+        const token = jsonwebtoken_1.default.sign({ id: agent.id, name: agent.name, phone: agent.phone, role: 'agent' }, JWT_SECRET, { expiresIn: '24h' });
         return {
             token,
             agent: {

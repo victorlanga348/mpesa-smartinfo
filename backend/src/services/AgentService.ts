@@ -2,6 +2,8 @@ import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { AgentStatus } from '../types';
+import { PingTimingService } from './PingTimingService';
+import { RatingService } from './RatingService';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretmpesatoken';
 
@@ -56,7 +58,8 @@ export class AgentService {
   }
 
   static async listAgents() {
-    return prisma.agent.findMany({
+    const [agents, averages, ratings] = await Promise.all([
+      prisma.agent.findMany({
       select: {
         id: true,
         name: true,
@@ -68,7 +71,33 @@ export class AgentService {
         updatedAt: true,
       },
       orderBy: { updatedAt: 'desc' },
-    });
+      }),
+      PingTimingService.getAverageServiceMinutesByAgent().catch(() => []),
+      RatingService.getAverageRatingsByAgent().catch(() => []),
+    ]);
+
+    const averageByAgent = new Map(averages.map((item) => [
+      item.agentId,
+      {
+        averageServiceMinutes: item.averageMinutes === null ? null : Number(item.averageMinutes),
+        completedCount: Number(item.completedCount),
+      }
+    ]));
+    const ratingByAgent = new Map(ratings.map((item) => [
+      item.agentId,
+      {
+        ratingAverage: item.averageRating === null ? null : Number(item.averageRating),
+        ratingCount: Number(item.ratingCount),
+      }
+    ]));
+
+    return agents.map((agent) => ({
+      ...agent,
+      averageServiceMinutes: averageByAgent.get(agent.id)?.averageServiceMinutes ?? null,
+      completedServiceCount: averageByAgent.get(agent.id)?.completedCount ?? 0,
+      ratingAverage: ratingByAgent.get(agent.id)?.ratingAverage ?? null,
+      ratingCount: ratingByAgent.get(agent.id)?.ratingCount ?? 0,
+    }));
   }
 
   static async updateStatus(agentId: string, status: AgentStatus) {
@@ -106,13 +135,16 @@ export class AgentService {
   static async updateReference(agentId: string, reference: string) {
     return prisma.agent.update({
       where: { id: agentId },
-      data: { reference },
+      data: { reference: reference.trim() || null },
       select: {
         id: true,
         name: true,
         phone: true,
         status: true,
+        latitude: true,
+        longitude: true,
         reference: true,
+        updatedAt: true,
       },
     });
   }

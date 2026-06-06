@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { PingStatus } from '../types';
+import { TransactionService } from './TransactionService';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'supersecretmpesatoken';
 
@@ -53,6 +54,7 @@ export class AdminService {
   }
 
   static async getStats() {
+    const totalUsers = await prisma.user.count();
     const totalAgents = await prisma.agent.count();
     const activeAgents = await prisma.agent.count({
       where: { status: { in: ['ONLINE', 'ON_MY_WAY'] } }
@@ -64,13 +66,30 @@ export class AdminService {
     const completedPings = await prisma.ping.count({
       where: { status: PingStatus.COMPLETED }
     });
+    const failedRequests = await prisma.ping.count({
+      where: { status: { in: [PingStatus.CANCELLED, PingStatus.REJECTED, PingStatus.EXPIRED] } }
+    });
+    const transactionTypes = await TransactionService.getRequestsByType().catch(() => []);
+    const requestsByType = transactionTypes.reduce<Record<string, number>>((acc, item) => {
+      acc[item.operationType] = Number(item.count);
+      return acc;
+    }, {
+      withdrawal: 0,
+      deposit: 0,
+      payment: 0,
+      info: 0,
+    });
 
     return {
+      totalUsers,
       totalAgents,
       activeAgents,
       totalPings,
       pendingPings,
-      completedPings
+      completedPings,
+      successfulRequests: completedPings,
+      failedRequests,
+      requestsByType
     };
   }
 

@@ -1,9 +1,16 @@
 import { Request, Response, NextFunction } from 'express';
-export interface AuthenticatedRequest extends Request {
-    agent?: {
-        id: string;
-        name: string;
-        phone: string;
-    };
+export type AuthRole = 'user' | 'agent' | 'admin';
+export interface AuthPayload {
+    id: string;
+    name: string;
+    phone?: string;
+    email?: string;
+    code?: string;
+    role: AuthRole;
 }
-export declare function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): Response<any, Record<string, any>> | undefined;
+export interface AuthenticatedRequest extends Request {
+    auth?: AuthPayload;
+    agent?: AuthPayload;
+}
+export declare function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction): void | Response<any, Record<string, any>>;
+export declare function requireRole(...roles: AuthRole[]): (req: AuthenticatedRequest, res: Response, next: NextFunction) => void | Response<any, Record<string, any>>;

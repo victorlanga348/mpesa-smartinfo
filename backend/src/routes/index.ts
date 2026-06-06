@@ -3,6 +3,7 @@ import { AgentController } from '../controllers/AgentController';
 import { PingController } from '../controllers/PingController';
 import { AdminController } from '../controllers/AdminController';
 import { UserController } from '../controllers/UserController';
+import { RatingController } from '../controllers/RatingController';
 import { authMiddleware, requireRole } from '../middlewares/auth';
 
 const router = Router();
@@ -41,5 +42,6 @@ router.put('/ping/:pingId/complete', authMiddleware, requireRole('agent'), PingC
 router.put('/ping/:pingId/cancel', authMiddleware, requireRole('user'), PingController.cancelPing);
 router.put('/ping/:pingId/arrive', authMiddleware, requireRole('user'), PingController.markArrived);
 router.put('/ping/:pingId/status', authMiddleware, requireRole('agent'), PingController.updatePingStatus);
+router.post('/ping/:pingId/rating', authMiddleware, requireRole('user'), RatingController.rateAgent);
 
 export default router;

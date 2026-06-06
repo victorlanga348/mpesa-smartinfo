@@ -21,6 +21,8 @@ export default function AgentDashboardPage() {
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
   const [serviceEnabled, setServiceEnabled] = useState(false)
+  const [reference, setReference] = useState('')
+  const [referenceSaving, setReferenceSaving] = useState(false)
   const { socket, state: socketState } = useSocket()
   const activeRequestsLoadingRef = useRef(false)
 
@@ -88,6 +90,7 @@ export default function AgentDashboardPage() {
 
         if (currentAgent) {
           setAgent(currentAgent)
+          setReference(currentAgent.location === 'Localizacao actual' ? '' : currentAgent.location)
           setServiceEnabled(true)
           socket.emit('join:agent', currentAgent.id)
           await loadActiveRequests(currentAgent.id)
@@ -183,6 +186,23 @@ export default function AgentDashboardPage() {
     }
   }
 
+  const saveReference = async () => {
+    if (!agent || referenceSaving) return
+
+    setReferenceSaving(true)
+    try {
+      const updated = await agentService.updateAgentReference(reference)
+      if (updated) {
+        setAgent(updated)
+        setReference(updated.location === 'Localizacao actual' ? '' : updated.location)
+      }
+    } catch (error) {
+      console.error('Failed to update agent reference:', error)
+    } finally {
+      setReferenceSaving(false)
+    }
+  }
+
   const rejectRequest = async (requestId: string) => {
     try {
       const response = await fetch(`${getApiUrl()}/ping/${requestId}/reject`, {
@@ -230,6 +250,9 @@ export default function AgentDashboardPage() {
   const queueList = requests.filter((request) => ['accepted', 'waiting_list'].includes(request.status))
   const pendingRequests = pendingList.length
   const clientsOnWay = queueList.length
+  const averageServiceTime = agent.averageServiceMinutes === null || agent.averageServiceMinutes === undefined
+    ? 'Sem dados suficientes'
+    : `${Math.round(agent.averageServiceMinutes)} min`
 
   return (
     <div className="space-y-8">
@@ -265,12 +288,35 @@ export default function AgentDashboardPage() {
             Offline
           </Button>
         </div>
+
+        <div className="mt-6 rounded-lg border border-gray-100 bg-gray-50 p-4">
+          <label htmlFor="agent-reference" className="block text-sm font-semibold text-gray-800">
+            Localizacao especifica
+          </label>
+          <p className="mt-1 text-xs text-gray-500">
+            Bairro, rua, referencia, agencia ou balcao. Opcional.
+          </p>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+            <input
+              id="agent-reference"
+              value={reference}
+              onChange={(event) => setReference(event.target.value)}
+              maxLength={120}
+              placeholder="Ex: Bairro Central, perto da banca azul"
+              className="min-h-11 flex-1 rounded-lg border border-gray-200 bg-white px-3 text-sm font-medium text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+            />
+            <Button onClick={saveReference} disabled={referenceSaving}>
+              {referenceSaving ? 'A guardar...' : 'Guardar'}
+            </Button>
+          </div>
+        </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard icon={Radio} label="Estado" value={agent.status === 'online' ? 'Em servico' : agent.status === 'busy' ? 'Com cliente' : 'Offline'} />
         <MetricCard icon={CheckCircle} label="Clientes a caminho" value={clientsOnWay.toString()} />
         <MetricCard icon={Clock} label="Pedidos pendentes" value={pendingRequests.toString()} />
+        <MetricCard icon={Clock} label="Tempo medio" value={averageServiceTime} />
         <MetricCard icon={MapPin} label="Localizacao" value={agent.latitude && agent.longitude ? 'Activa' : 'Por definir'} />
       </section>
 

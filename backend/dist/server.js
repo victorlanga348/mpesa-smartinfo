@@ -21,14 +21,17 @@ const allowedOrigins = [
 const isPrivateNetworkOrigin = (origin) => {
     return /^http:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+):\d+$/.test(origin);
 };
+const isAllowedOrigin = (origin) => {
+    return !origin || allowedOrigins.includes(origin) || isPrivateNetworkOrigin(origin);
+};
 const io = new socket_io_1.Server(server, {
     cors: {
         origin: (origin, callback) => {
-            if (!origin || allowedOrigins.includes(origin) || isPrivateNetworkOrigin(origin)) {
+            if (isAllowedOrigin(origin)) {
                 callback(null, true);
                 return;
             }
-            callback(null, true);
+            callback(new Error('Origem nao permitida pelo CORS'));
         },
         methods: ['GET', 'POST', 'PUT', 'DELETE'],
     },
@@ -37,11 +40,11 @@ const PORT = process.env.PORT || 5000;
 const HOST = process.env.HOST || '0.0.0.0';
 app.use((0, cors_1.default)({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin) || isPrivateNetworkOrigin(origin)) {
+        if (isAllowedOrigin(origin)) {
             callback(null, true);
             return;
         }
-        callback(null, true);
+        callback(new Error('Origem nao permitida pelo CORS'));
     },
 }));
 app.use(express_1.default.json());

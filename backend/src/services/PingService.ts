@@ -1,5 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { PingStatus, AgentStatus } from '../types';
+import { parseMoneyAmount, TransactionService } from './TransactionService';
+import { PingTimingService } from './PingTimingService';
 
 const pingInclude = {
   user: {
@@ -24,17 +26,33 @@ const pingInclude = {
 
 export class PingService {
   static async createPing(userId: string, latitude: number, longitude: number, agentId: string, amount: number, operationType: string) {
-    return prisma.ping.create({
-      data: {
+    const normalizedOperation = String(operationType || '').trim().toLowerCase();
+    const normalizedAmount = parseMoneyAmount(amount);
+
+    return prisma.$transaction(async (tx) => {
+      const ping = await tx.ping.create({
+        data: {
+          userId,
+          agentId,
+          amount: normalizedAmount,
+          operationType: normalizedOperation,
+          status: PingStatus.PENDING,
+          latitude,
+          longitude
+        },
+        include: pingInclude
+      });
+
+      await TransactionService.createForPing(tx, {
+        pingId: ping.id,
         userId,
         agentId,
-        amount,
-        operationType,
-        status: PingStatus.PENDING,
-        latitude,
-        longitude
-      },
-      include: pingInclude
+        operationType: normalizedOperation,
+        amount: normalizedAmount,
+        status: PingStatus.PENDING
+      });
+
+      return ping;
     });
   }
 
@@ -58,6 +76,9 @@ export class PingService {
         include: pingInclude
       });
 
+      await PingTimingService.markStatusTime(tx, pingId, PingStatus.ACCEPTED);
+      await TransactionService.updateStatusByPing(tx, pingId, PingStatus.ACCEPTED);
+
       return updatedPing;
     });
   }
@@ -69,11 +90,15 @@ export class PingService {
       if (ping.agentId !== agentId) throw new Error('Apenas o agente associado pode rejeitar este pedido.');
       if (ping.status !== PingStatus.PENDING) throw new Error('Apenas pedidos pendentes podem ser rejeitados.');
 
-      return tx.ping.update({
+      const updatedPing = await tx.ping.update({
         where: { id: pingId },
         data: { status: PingStatus.REJECTED },
         include: pingInclude
       });
+
+      await PingTimingService.markStatusTime(tx, pingId, PingStatus.REJECTED);
+      await TransactionService.updateStatusByPing(tx, pingId, PingStatus.REJECTED);
+      return updatedPing;
     });
   }
 
@@ -90,11 +115,15 @@ export class PingService {
         throw new Error('Este pedido ja nao pode ser cancelado.');
       }
 
-      return tx.ping.update({
+      const updatedPing = await tx.ping.update({
         where: { id: pingId },
         data: { status: PingStatus.CANCELLED },
         include: pingInclude
       });
+
+      await PingTimingService.markStatusTime(tx, pingId, PingStatus.CANCELLED);
+      await TransactionService.updateStatusByPing(tx, pingId, PingStatus.CANCELLED);
+      return updatedPing;
     });
   }
 
@@ -107,11 +136,15 @@ export class PingService {
         throw new Error('So pode marcar chegada depois do pedido ser aceite.');
       }
 
-      return tx.ping.update({
+      const updatedPing = await tx.ping.update({
         where: { id: pingId },
         data: { status: PingStatus.ARRIVED },
         include: pingInclude
       });
+
+      await PingTimingService.markStatusTime(tx, pingId, PingStatus.ARRIVED);
+      await TransactionService.updateStatusByPing(tx, pingId, PingStatus.ARRIVED);
+      return updatedPing;
     });
   }
 
@@ -149,7 +182,7 @@ export class PingService {
         });
       }
 
-      return tx.ping.update({
+      const updatedPing = await tx.ping.update({
         where: { id: pingId },
         data: {
           status,
@@ -158,6 +191,10 @@ export class PingService {
         },
         include: pingInclude
       });
+
+      await PingTimingService.markStatusTime(tx, pingId, status);
+      await TransactionService.updateStatusByPing(tx, pingId, status);
+      return updatedPing;
     });
   }
 

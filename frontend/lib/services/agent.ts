@@ -7,6 +7,14 @@ const AGENTS_STORAGE_KEY = 'smartinfo_agents'
 function normalizeAgent(agent: ApiAgent): Agent {
   const fallback = MOCK_AGENTS.find((item) => item.id === agent.id)
   const status = String(agent.status || fallback?.status || 'offline').toUpperCase()
+  const averageServiceMinutes = agent.averageServiceMinutes === null || agent.averageServiceMinutes === undefined
+    ? null
+    : Number(agent.averageServiceMinutes)
+  const completedServiceCount = Number(agent.completedServiceCount ?? 0)
+  const ratingAverage = agent.ratingAverage === null || agent.ratingAverage === undefined
+    ? null
+    : Number(agent.ratingAverage)
+  const ratingCount = Number(agent.ratingCount ?? 0)
 
   return {
     id: agent.id,
@@ -16,9 +24,12 @@ function normalizeAgent(agent: ApiAgent): Agent {
     longitude: Number(agent.longitude ?? fallback?.longitude ?? 32.5732),
     status: status === 'ONLINE' ? 'online' : status === 'ON_MY_WAY' ? 'busy' : 'offline',
     location: agent.reference || fallback?.location || 'Localizacao actual',
-    rating: fallback?.rating ?? 4.7,
-    responseTime: fallback?.responseTime ?? 25,
-    totalRequests: fallback?.totalRequests ?? 0,
+    rating: ratingAverage ?? 0,
+    ratingCount,
+    responseTime: averageServiceMinutes === null ? 0 : Math.round(averageServiceMinutes * 60),
+    averageServiceMinutes,
+    completedServiceCount,
+    totalRequests: completedServiceCount,
   }
 }
 
@@ -101,6 +112,14 @@ export const agentService = {
     const updated = await apiRequest('/agent/location', {
       method: 'PUT',
       body: JSON.stringify({ latitude, longitude }),
+    })
+    return normalizeAgent(updated)
+  },
+
+  async updateAgentReference(reference: string): Promise<Agent | null> {
+    const updated = await apiRequest('/agent/reference', {
+      method: 'PUT',
+      body: JSON.stringify({ reference }),
     })
     return normalizeAgent(updated)
   },

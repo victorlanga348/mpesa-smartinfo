@@ -5,7 +5,7 @@ import { Circle, MapContainer, Marker, Popup, TileLayer, useMap } from 'react-le
 import L from 'leaflet'
 import { motion } from 'framer-motion'
 import { LocateFixed, MapPin, Search, Sparkles, X } from 'lucide-react'
-import { Agent, AgentRating, CriticalZone } from '@/lib/types'
+import { Agent, CriticalZone } from '@/lib/types'
 import { agentService } from '@/lib/services'
 import { CRITICAL_ZONES, MAPUTO_CENTER } from '@/lib/mock-data'
 
@@ -89,20 +89,10 @@ function findZone(query: string): CriticalZone | null {
 }
 
 function getAgentRating(agent: Agent) {
-  if (typeof window === 'undefined') {
-    return { rating: agent.rating, count: 0, badge: agent.rating >= 4.8 ? 'Agente destaque' : '' }
-  }
-
-  const stored = localStorage.getItem('smartinfo_agent_ratings')
-  const ratings = stored ? JSON.parse(stored) as AgentRating[] : []
-  const agentRatings = ratings.filter((item) => item.agentId === agent.id)
-  if (agentRatings.length === 0) {
-    return { rating: agent.rating, count: 0, badge: agent.rating >= 4.8 ? 'Agente destaque' : '' }
-  }
-
-  const average = agentRatings.reduce((sum, item) => sum + Number(item.rating || 0), 0) / agentRatings.length
-  const badge = average >= 4.8 ? 'Agente de excelencia' : average >= 4.5 ? 'Muito bem avaliado' : ''
-  return { rating: average, count: agentRatings.length, badge }
+  const rating = Number(agent.rating || 0)
+  const count = agent.ratingCount || 0
+  const badge = count > 0 && rating >= 4.8 ? 'Agente de excelencia' : count > 0 && rating >= 4.5 ? 'Muito bem avaliado' : ''
+  return { rating, count, badge }
 }
 
 export function MapView({ onAgentSelect }: { onAgentSelect: (agent: Agent) => void }) {
@@ -331,7 +321,7 @@ export function MapView({ onAgentSelect }: { onAgentSelect: (agent: Agent) => vo
                       {agent.status === 'online' ? 'Online' : agent.status === 'busy' ? 'Ocupado' : 'Offline'}
                     </span>
                     <span className="rounded bg-green-100 px-2 py-1 text-xs font-semibold text-green-800">
-                      {ratingInfo.rating.toFixed(1)} estrela
+                      {ratingInfo.count > 0 ? `${ratingInfo.rating.toFixed(1)} estrela` : 'Sem avaliacao'}
                     </span>
                   </div>
                   <button
