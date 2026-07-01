@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { ArrowLeft, CheckCircle, Clock, Coins, Info, TrendingUp, Wallet } from 'lucide-react'
 import Link from 'next/link'
@@ -31,17 +31,22 @@ function educationalMessage(level: SavingsLevel) {
 
 function AnimatedNumber({ value }: { value: number }) {
   const [display, setDisplay] = useState(0)
+  const previousValueRef = useRef(0)
 
   useEffect(() => {
     let frame = 0
     const totalFrames = 24
-    const start = display
+    const start = previousValueRef.current
     const diff = value - start
     const timer = window.setInterval(() => {
       frame += 1
       const progress = Math.min(frame / totalFrames, 1)
-      setDisplay(Math.round(start + diff * progress))
-      if (progress === 1) window.clearInterval(timer)
+      const nextValue = Math.round(start + diff * progress)
+      setDisplay(nextValue)
+      if (progress === 1) {
+        previousValueRef.current = value
+        window.clearInterval(timer)
+      }
     }, 20)
 
     return () => window.clearInterval(timer)

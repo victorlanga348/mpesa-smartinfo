@@ -6,8 +6,7 @@ import Link from 'next/link'
 import { ArrowRight, Shield, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { authService } from '@/lib/services'
-import { getApiUrl } from '@/lib/socket'
+import { authService } from '@/lib/services/auth'
 
 export default function AuthPage() {
   const [activeTab, setActiveTab] = useState<'client' | 'admin'>('client')
@@ -42,17 +41,7 @@ export default function AuthPage() {
 
     try {
       if (!adminEmail || !adminPassword) throw new Error('Preencha o email e a palavra-passe.')
-
-      const response = await fetch(`${getApiUrl()}/admin/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: adminEmail, password: adminPassword }),
-      })
-      const data = await response.json()
-
-      if (!response.ok) throw new Error(data.error || 'Nao foi possivel entrar.')
-
-      localStorage.setItem('smartinfo_user', JSON.stringify({ ...data.user, token: data.token, type: 'admin', role: 'admin' }))
+      await authService.loginAdmin(adminEmail, adminPassword)
       router.push('/app/admin-dashboard')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login falhou.')
@@ -103,12 +92,12 @@ export default function AuthPage() {
             {activeTab === 'client' ? (
               <form onSubmit={handleClientLogin} className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Nome</label>
-                  <Input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Nome registado" required />
+                  <label htmlFor="client-name" className="mb-1 block text-sm font-medium text-gray-700">Nome</label>
+                  <Input id="client-name" value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Nome registado" required />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Numero</label>
-                  <Input value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="84 xxx xxxx" required />
+                  <label htmlFor="client-phone" className="mb-1 block text-sm font-medium text-gray-700">Numero</label>
+                  <Input id="client-phone" value={clientPhone} onChange={(event) => setClientPhone(event.target.value)} placeholder="84 xxx xxxx" required />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full bg-[#E60000] text-white hover:bg-red-700">
                   {loading ? 'A entrar...' : 'Entrar'}
@@ -118,12 +107,12 @@ export default function AuthPage() {
             ) : (
               <form onSubmit={handleAdminLogin} className="space-y-4">
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Email institucional</label>
-                  <Input type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="email da equipa" required />
+                  <label htmlFor="admin-email" className="mb-1 block text-sm font-medium text-gray-700">Email institucional</label>
+                  <Input id="admin-email" type="email" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} placeholder="email da equipa" required />
                 </div>
                 <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Palavra-passe</label>
-                  <Input type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder="Palavra-passe" required />
+                  <label htmlFor="admin-password" className="mb-1 block text-sm font-medium text-gray-700">Palavra-passe</label>
+                  <Input id="admin-password" type="password" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} placeholder="Palavra-passe" required />
                 </div>
                 <Button type="submit" disabled={loading} className="w-full bg-[#E60000] text-white hover:bg-red-700">
                   {loading ? 'A entrar...' : 'Entrar'}

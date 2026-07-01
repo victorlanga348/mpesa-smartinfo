@@ -7,7 +7,7 @@ import { Home, Shield, Smartphone, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { authService } from '@/lib/services'
+import { authService } from '@/lib/services/auth'
 import { getErrorMessage } from '@/lib/runtime'
 
 export default function LoginPage() {
@@ -110,8 +110,8 @@ export default function LoginPage() {
           <TabsContent value="customer">
             <AccessFormError error={error} active={activeTab === 'customer'} />
             <form onSubmit={handleClientLogin} className="space-y-4">
-              <Field label="Nome" value={clientName} onChange={setClientName} placeholder="Nome registado" />
-              <Field label="Numero" value={clientPhone} onChange={setClientPhone} placeholder="84 xxx xxxx" type="tel" />
+              <Field id="customer-name" label="Nome" value={clientName} onChange={setClientName} placeholder="Nome registado" />
+              <Field id="customer-phone" label="Numero" value={clientPhone} onChange={setClientPhone} placeholder="84 xxx xxxx" type="tel" />
               <SubmitButton loading={loading} />
             </form>
           </TabsContent>
@@ -119,8 +119,8 @@ export default function LoginPage() {
           <TabsContent value="agent">
             <AccessFormError error={error} active={activeTab === 'agent'} />
             <form onSubmit={handleAgentLogin} className="space-y-4">
-              <Field label="Nome do agente" value={agentName} onChange={setAgentName} placeholder="Nome registado" />
-              <Field label="Codigo do agente" value={agentCode} onChange={setAgentCode} placeholder="Codigo recebido" type="password" />
+              <Field id="agent-name" label="Nome do agente" value={agentName} onChange={setAgentName} placeholder="Nome registado" />
+              <Field id="agent-code" label="Codigo do agente" value={agentCode} onChange={setAgentCode} placeholder="Codigo recebido" type="password" />
               <SubmitButton loading={loading} />
             </form>
           </TabsContent>
@@ -128,8 +128,8 @@ export default function LoginPage() {
           <TabsContent value="admin">
             <AccessFormError error={error} active={activeTab === 'admin'} />
             <form onSubmit={handleAdminLogin} className="space-y-4">
-              <Field label="Email institucional" value={adminEmail} onChange={setAdminEmail} placeholder="email da equipa" type="email" />
-              <Field label="Palavra-passe" value={adminPassword} onChange={setAdminPassword} placeholder="Palavra-passe" type="password" />
+              <Field id="admin-email" label="Email institucional" value={adminEmail} onChange={setAdminEmail} placeholder="email da equipa" type="email" />
+              <Field id="admin-password" label="Palavra-passe" value={adminPassword} onChange={setAdminPassword} placeholder="Palavra-passe" type="password" />
               <SubmitButton loading={loading} />
             </form>
           </TabsContent>
@@ -144,12 +144,14 @@ export default function LoginPage() {
 }
 
 function Field({
+  id,
   label,
   value,
   onChange,
   placeholder,
   type = 'text',
 }: {
+  id: string
   label: string
   value: string
   onChange: (value: string) => void
@@ -158,8 +160,9 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
+      <label htmlFor={id} className="mb-1 block text-sm font-medium text-gray-700">{label}</label>
       <Input
+        id={id}
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}

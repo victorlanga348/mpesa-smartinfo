@@ -4,18 +4,21 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Menu, X } from 'lucide-react'
 import { MouseEvent, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 
 export function Navbar() {
   const [isOpen, setIsOpen] = useState(false)
   const [activeLink, setActiveLink] = useState('')
+  const pathname = usePathname()
 
   const navLinks = [
     { href: '#como-usar', label: 'Como usar' },
     { href: '#poupanca', label: 'Poupanca' },
     { href: '#agentes', label: 'Agentes' },
-    { href: '/help', label: 'Ajuda' },
+    { href: '/app/help', label: 'Ajuda' },
   ]
+  const visibleNavLinks = navLinks.filter((link) => link.href.startsWith('#') || !isCurrentRoute(pathname, link.href))
 
   const handleSectionClick = (event: MouseEvent<HTMLAnchorElement>, href: string) => {
     if (!href.startsWith('#')) {
@@ -46,7 +49,7 @@ export function Navbar() {
           </Link>
 
           <div className="hidden items-center rounded-full border border-gray-200 bg-gray-50/80 p-1 md:flex">
-            {navLinks.map((link) => (
+            {visibleNavLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -64,9 +67,11 @@ export function Navbar() {
             <Button asChild variant="outline" className="rounded-full border-red-200 px-5 text-primary">
               <Link href="/login">Entrar</Link>
             </Button>
-            <Button asChild className="rounded-full bg-primary px-5 text-white shadow-md shadow-red-600/20 hover:bg-red-700">
-              <Link href="/app/map">Procurar agente</Link>
-            </Button>
+            {!isCurrentRoute(pathname, '/app/map') && (
+              <Button asChild className="rounded-full bg-primary px-5 text-white shadow-md shadow-red-600/20 hover:bg-red-700">
+                <Link href="/app/map">Procurar agente</Link>
+              </Button>
+            )}
           </div>
 
           <button
@@ -88,7 +93,7 @@ export function Navbar() {
               className="md:hidden"
             >
               <div className="mb-4 rounded-lg border border-gray-200 bg-white p-2 shadow-xl">
-                {navLinks.map((link) => (
+                {visibleNavLinks.map((link) => (
                   <Link
                     key={link.href}
                     href={link.href}
@@ -104,9 +109,11 @@ export function Navbar() {
                   <Button asChild variant="outline" className="rounded-full border-red-200 text-primary">
                     <Link href="/login">Entrar</Link>
                   </Button>
-                  <Button asChild className="rounded-full bg-primary text-white hover:bg-red-700">
-                    <Link href="/app/map">Procurar</Link>
-                  </Button>
+                  {!isCurrentRoute(pathname, '/app/map') && (
+                    <Button asChild className="rounded-full bg-primary text-white hover:bg-red-700">
+                      <Link href="/app/map">Procurar</Link>
+                    </Button>
+                  )}
                 </div>
               </div>
             </motion.div>
@@ -115,4 +122,8 @@ export function Navbar() {
       </div>
     </nav>
   )
+}
+
+function isCurrentRoute(pathname: string, href: string) {
+  return pathname === href || pathname.startsWith(`${href}/`)
 }

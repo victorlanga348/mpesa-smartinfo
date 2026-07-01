@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 
 export default function AgentDashboardPage() {
   const router = useRouter()
-  const [user, setUser] = useState(() => authService.getCurrentUser())
+  const [user] = useState(() => authService.getCurrentUser())
   const [agent, setAgent] = useState<Agent | null>(null)
   const [requests, setRequests] = useState<Request[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,10 +74,6 @@ export default function AgentDashboardPage() {
   })
 
   useEffect(() => {
-    setUser(authService.getCurrentUser())
-  }, [])
-
-  useEffect(() => {
     if (!user || user.role !== 'agent') {
       router.push('/auth')
       return
@@ -103,7 +99,7 @@ export default function AgentDashboardPage() {
     }
 
     loadData()
-  }, [loadActiveRequests, router, socket, user?.id, user?.role])
+  }, [loadActiveRequests, router, socket, user])
 
   useEffect(() => {
     if (!agent) return

@@ -123,15 +123,18 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    scrollbar-width: none;
   }
 
   * {
     @apply border-border outline-ring/50;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(74, 74, 74, 0.22) transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
   }
 
   section[id] {
@@ -140,21 +143,7 @@
 }
 
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  background: rgba(74, 74, 74, 0.22);
-  border-radius: 999px;
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: rgba(230, 0, 0, 0.38);
+  display: none;
 }
 
 .leaflet-container {
@@ -174,5 +163,26 @@
   }
   45% {
     transform: translateY(-7px) scale(1.08);
+  }
+}
+
+@keyframes scroll-hint-float {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: .82;
+  }
+  50% {
+    transform: translateY(4px);
+    opacity: 1;
+  }
+}
+
+.scroll-indicator-chip {
+  animation: scroll-hint-float 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scroll-indicator-chip {
+    animation: none;
   }
 }

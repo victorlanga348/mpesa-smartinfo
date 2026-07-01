@@ -6,7 +6,7 @@ import L from 'leaflet'
 import { motion } from 'framer-motion'
 import { LocateFixed, MapPin, Search, Sparkles, X } from 'lucide-react'
 import { Agent, CriticalZone } from '@/lib/types'
-import { agentService } from '@/lib/services'
+import { agentService } from '@/lib/services/agent'
 import { CRITICAL_ZONES, MAPUTO_CENTER } from '@/lib/mock-data'
 
 const createMarkerIcon = (status: string) => {
@@ -108,7 +108,7 @@ export function MapView({ onAgentSelect }: { onAgentSelect: (agent: Agent) => vo
   useEffect(() => {
     async function loadAgents() {
       try {
-        const data = await agentService.getAllAgents()
+        const data = await agentService.getAgents()
         setAgents(data)
       } finally {
         setLoading(false)

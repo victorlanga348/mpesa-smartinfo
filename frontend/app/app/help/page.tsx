@@ -35,6 +35,7 @@ import {
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { formatMaintenanceDate, maintenanceInfo } from '@/lib/maintenance'
 
 const faqItems = [
   {
@@ -138,17 +139,13 @@ const commonProblems = [
   },
 ]
 
-const systemStatus = [
-  'Plataforma operacional',
-  'Mapa online',
-  'Servicos activos',
-]
-
 export const dynamic = 'force-dynamic'
 
 export default function HelpPage() {
   const [query, setQuery] = useState('')
   const [selectedProblem, setSelectedProblem] = useState(commonProblems[0])
+  const scheduledAt = formatMaintenanceDate(maintenanceInfo.scheduledAt)
+  const estimatedEndAt = formatMaintenanceDate(maintenanceInfo.estimatedEndAt)
 
   const filteredFaq = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -244,19 +241,35 @@ export default function HelpPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35, delay: 0.1 }}
-          className="rounded-lg border border-green-200 bg-green-50 px-4 py-5 shadow-sm"
+          className="rounded-lg border border-gray-200 bg-white px-4 py-5 shadow-sm"
         >
           <div className="flex items-center gap-2">
-            <CheckCircle2 className="size-5 text-green-700" />
-            <h2 className="text-lg font-black text-gray-900">Estado do Sistema</h2>
+            <CheckCircle2 className="size-5 text-green-700" aria-hidden="true" />
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+              {maintenanceInfo.state === 'operational' ? 'Operacional' : 'Manutencao'}
+            </p>
           </div>
-          <div className="mt-4 space-y-3">
-            {systemStatus.map((status) => (
-              <div key={status} className="flex items-center gap-3 text-sm font-medium text-gray-700">
-                <span className="size-2.5 rounded-full bg-green-600" />
-                {status}
-              </div>
-            ))}
+          <div className="mt-3 space-y-2">
+            <h2 className="text-lg font-black text-gray-900">{maintenanceInfo.title}</h2>
+            <p className="text-sm leading-6 text-gray-600">{maintenanceInfo.description}</p>
+            {scheduledAt && (
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">Data: </span>
+                {scheduledAt}
+              </p>
+            )}
+            {estimatedEndAt && (
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">Previsao: </span>
+                {estimatedEndAt}
+              </p>
+            )}
+            {maintenanceInfo.impact && (
+              <p className="text-sm text-gray-700">
+                <span className="font-semibold">Impacto: </span>
+                {maintenanceInfo.impact}
+              </p>
+            )}
           </div>
         </motion.aside>
       </section>
