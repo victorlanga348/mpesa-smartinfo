@@ -15,7 +15,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setMounted(true)
-    const publicClientRoute = pathname === '/app/map'
+    const publicClientRoute = ['/app/map', '/app/help', '/app/calculator'].includes(pathname)
 
     if (publicClientRoute) {
       setIsAuthenticated(true)
@@ -23,14 +23,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
 
     if (!authService.isAuthenticated()) {
-      router.push('/auth')
+      router.replace('/auth')
     } else {
       setIsAuthenticated(true)
     }
   }, [pathname, router])
 
   if (!mounted || !isAuthenticated) {
-    return null
+    return (
+      <div
+        className="flex min-h-screen items-center justify-center bg-background px-4 text-center"
+        role="status"
+        aria-live="polite"
+      >
+        <p className="text-sm font-medium text-muted-foreground">
+          A validar acesso...
+        </p>
+      </div>
+    )
   }
 
   return <AppLayoutComponent>{children}</AppLayoutComponent>

@@ -122,7 +122,7 @@ export default function Home() {
               </p>
             </div>
             <Button asChild className="h-12 rounded-full bg-primary px-7 font-black text-white hover:bg-red-700">
-              <Link href="/help">Abrir ajuda</Link>
+              <Link href="/app/help">Abrir ajuda</Link>
             </Button>
           </div>
         </div>

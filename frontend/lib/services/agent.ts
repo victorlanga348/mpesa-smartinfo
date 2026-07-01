@@ -124,6 +124,19 @@ export const agentService = {
     return normalizeAgent(updated)
   },
 
+  async pingAgent(agentId: string, amount: number, operationType: string = 'withdrawal', lat: number = 0, lng: number = 0) {
+    return apiRequest('/ping', {
+      method: 'POST',
+      body: JSON.stringify({
+        latitude: lat,
+        longitude: lng,
+        agentId,
+        amount,
+        operationType,
+      }),
+    })
+  },
+
   async updateAgentBalance(agentId: string): Promise<Agent | null> {
     return this.getAgent(agentId)
   },

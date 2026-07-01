@@ -1,18 +1,30 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { Search } from 'lucide-react'
 import { Agent } from '@/lib/types'
 import { MAPUTO_CENTER } from '@/lib/mock-data'
 import { useGeolocation } from '@/hooks/use-geolocation'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { useLiveAgents } from '@/hooks/use-live-agents'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 export function MapComponent({ onAgentSelect }: { onAgentSelect?: (agent: Agent) => void }) {
   const mapRef = useRef<L.Map | null>(null)
   const agentMarkersRef = useRef<Map<string, L.Marker>>(new Map())
   const clientMarkerRef = useRef<L.Marker | null>(null)
   const [manualSearch, setManualSearch] = useState('')
+  const [directoryOpen, setDirectoryOpen] = useState(false)
+  const [directoryQuery, setDirectoryQuery] = useState('')
+  const isMobile = useIsMobile()
   const { coords, error, permissionDenied } = useGeolocation({ watch: true })
   const { agents, loading, socketState } = useLiveAgents(coords)
 
@@ -93,7 +105,26 @@ export function MapComponent({ onAgentSelect }: { onAgentSelect?: (agent: Agent)
     })
   }, [agents, onAgentSelect])
 
-  const visibleAgents = agents.slice(0, 4)
+  const visibleAgents = useMemo(() => agents.slice(0, 3), [agents])
+  const statusSummary = useMemo(() => ({
+    online: agents.filter((agent) => agent.status === 'online').length,
+    busy: agents.filter((agent) => agent.status === 'busy').length,
+  }), [agents])
+  const shouldShowDirectoryButton = statusSummary.online > 3
+  const directoryAgents = useMemo(() => {
+    const normalizedQuery = directoryQuery.trim().toLowerCase()
+    if (!normalizedQuery) return agents
+
+    return agents.filter((agent) =>
+      agent.name.toLowerCase().includes(normalizedQuery) ||
+      agent.location.toLowerCase().includes(normalizedQuery)
+    )
+  }, [agents, directoryQuery])
+
+  const handleAgentSelect = (agent: Agent) => {
+    setDirectoryOpen(false)
+    onAgentSelect?.(agent)
+  }
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-lg bg-gray-100">
@@ -110,6 +141,18 @@ export function MapComponent({ onAgentSelect }: { onAgentSelect?: (agent: Agent)
           <span className={`size-3 rounded-full ${socketState === 'online' ? 'bg-green-500' : socketState === 'reconnecting' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
         </div>
 
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
+          <span className="rounded-full bg-green-50 px-2.5 py-1 text-green-700">
+            {statusSummary.online} disponiveis
+          </span>
+          <span className="rounded-full bg-yellow-50 px-2.5 py-1 text-yellow-700">
+            {statusSummary.busy} ocupados
+          </span>
+          <span className="rounded-full bg-gray-100 px-2.5 py-1 text-gray-700">
+            {agents.length} no total
+          </span>
+        </div>
+
         {(permissionDenied || error) && (
           <div className="mt-3 rounded-md border border-yellow-200 bg-yellow-50 p-3">
             <p className="text-xs leading-5 text-yellow-900">
@@ -124,17 +167,30 @@ export function MapComponent({ onAgentSelect }: { onAgentSelect?: (agent: Agent)
           </div>
         )}
 
-        <div className="mt-3 max-h-44 space-y-2 overflow-y-auto">
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold text-gray-600">Mais relevantes perto de si</p>
+          {shouldShowDirectoryButton && (
+            <button
+              type="button"
+              onClick={() => setDirectoryOpen(true)}
+              className="inline-flex shrink-0 items-center rounded-full bg-red-50 px-3 py-1.5 text-xs font-bold text-primary transition hover:bg-red-100 hover:text-red-700"
+            >
+              Ver todos os agentes
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 space-y-2">
           {visibleAgents.map((agent) => (
             <button
               key={agent.id}
               type="button"
-              onClick={() => onAgentSelect?.(agent)}
-              className="flex w-full items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-left hover:border-red-200 hover:bg-red-50"
+              onClick={() => handleAgentSelect(agent)}
+              className="flex w-full items-center justify-between rounded-md border border-gray-100 bg-gray-50 px-3 py-2 text-left transition hover:border-red-200 hover:bg-red-50"
             >
-              <span>
-                <span className="block text-xs font-bold text-gray-900">{agent.name}</span>
-                <span className="block text-xs text-gray-600">
+              <span className="min-w-0">
+                <span className="block truncate text-xs font-bold text-gray-900">{agent.name}</span>
+                <span className="block truncate text-xs text-gray-600">
                   {agent.distanceKm !== undefined ? `Agente a ${agent.distanceKm.toFixed(1)} km de si` : agent.location}
                 </span>
               </span>
@@ -143,6 +199,67 @@ export function MapComponent({ onAgentSelect }: { onAgentSelect?: (agent: Agent)
           ))}
         </div>
       </div>
+
+      <Sheet open={directoryOpen} onOpenChange={setDirectoryOpen}>
+        <SheetContent
+          side={isMobile ? 'bottom' : 'right'}
+          className={isMobile ? 'h-[78vh] rounded-t-2xl border-t p-0' : 'w-full max-w-xl p-0'}
+        >
+          <SheetHeader className="border-b border-gray-100 px-5 py-4 text-left">
+            <SheetTitle className="text-gray-900">Lista completa de agentes</SheetTitle>
+            <SheetDescription>
+              Explore todos os agentes sem perder o foco do mapa.
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="border-b border-gray-100 px-5 py-4">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-gray-400" />
+              <input
+                value={directoryQuery}
+                onChange={(event) => setDirectoryQuery(event.target.value)}
+                placeholder="Pesquisar por nome ou zona..."
+                className="h-11 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm text-gray-900 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-100"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-3 py-3">
+            <div className="space-y-2">
+              {directoryAgents.map((agent) => (
+                <button
+                  key={agent.id}
+                  type="button"
+                  onClick={() => handleAgentSelect(agent)}
+                  className="flex w-full items-center justify-between rounded-lg border border-gray-100 bg-white px-4 py-3 text-left transition hover:border-red-200 hover:bg-red-50"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold text-gray-900">{agent.name}</span>
+                    <span className="block truncate text-xs text-gray-600">
+                      {agent.distanceKm !== undefined ? `${agent.distanceKm.toFixed(1)} km de si` : agent.location}
+                    </span>
+                  </span>
+                  <span className={`ml-3 shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold ${
+                    agent.status === 'online'
+                      ? 'bg-green-50 text-green-700'
+                      : agent.status === 'busy'
+                        ? 'bg-yellow-50 text-yellow-700'
+                        : 'bg-gray-100 text-gray-600'
+                  }`}>
+                    {agent.status === 'online' ? 'Disponivel' : agent.status === 'busy' ? 'Ocupado' : 'Offline'}
+                  </span>
+                </button>
+              ))}
+
+              {directoryAgents.length === 0 && (
+                <div className="rounded-lg border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-600">
+                  Nenhum agente encontrado para essa pesquisa.
+                </div>
+              )}
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {loading && (
         <div className="absolute inset-0 z-[800] flex items-center justify-center bg-black/20 backdrop-blur-sm">

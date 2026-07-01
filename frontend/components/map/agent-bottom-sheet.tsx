@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CheckCircle, X, MapPin, Star, Zap } from 'lucide-react'
 import { Agent, ApiPing, LocalRequest, Request, Reservation, StoredUser } from '@/lib/types'
 import { Button } from '@/components/ui/button'
-import { agentService, authService, requestService, reservationService } from '@/lib/services'
+import { agentService } from '@/lib/services/agent'
+import { authService } from '@/lib/services/auth'
+import { requestService } from '@/lib/services/request'
+import { reservationService } from '@/lib/services/reservation'
 import { useSocket } from '@/hooks/use-socket'
 import { toast } from '@/hooks/use-toast'
 import { getApiUrl } from '@/lib/socket'
@@ -114,7 +117,14 @@ export function AgentBottomSheet({
     return 'pending'
   }
 
-  const buildReservationFromPing = (ping: ApiPing): Reservation => {
+  const updateLocalRequest = (id: string, changes: Partial<LocalRequest>) => {
+    const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
+    const updated = requests.map((request) => request.id === id ? { ...request, ...changes } : request)
+    localStorage.setItem('smartinfo_requests', JSON.stringify(updated))
+    return updated.find((request) => request.id === id)
+  }
+
+  const buildReservationFromPing = useCallback((ping: ApiPing): Reservation => {
     const expiresAt = ping.reservationExpires
       ? new Date(ping.reservationExpires)
       : new Date(Date.now() + waitMinutes * 60 * 1000)
@@ -130,9 +140,9 @@ export function AgentBottomSheet({
       expiresAt,
       createdAt: ping.createdAt ? new Date(ping.createdAt) : new Date(),
     }
-  }
+  }, [agent?.id, waitMinutes])
 
-  const applyPingUpdate = (ping: ApiPing) => {
+  const applyPingUpdate = useCallback((ping: ApiPing) => {
     if (!currentRequest?.id || ping.id !== currentRequest.id) return
 
     const status = normalizeRequestStatus(ping.status)
@@ -164,19 +174,7 @@ export function AgentBottomSheet({
         description: 'O agente finalizou o atendimento.',
       })
     }
-  }
-
-  const updateLocalRequest = (id: string, changes: Partial<LocalRequest>) => {
-    const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
-    const updated = requests.map((request) => request.id === id ? { ...request, ...changes } : request)
-    localStorage.setItem('smartinfo_requests', JSON.stringify(updated))
-    return updated.find((request) => request.id === id)
-  }
-
-  const removeLocalRequest = (id: string) => {
-    const requests = parseJson<LocalRequest[]>(localStorage.getItem('smartinfo_requests'), [])
-    localStorage.setItem('smartinfo_requests', JSON.stringify(requests.filter((request) => request.id !== id)))
-  }
+  }, [buildReservationFromPing, currentRequest])
 
   useEffect(() => {
     if (!currentRequest?.id || step !== 'reserved') return
@@ -232,7 +230,7 @@ export function AgentBottomSheet({
       socket.off('ping:rejected', handleRejected)
       socket.off('ping:expired', handleRejected)
     }
-  }, [agent, currentRequest, socket, waitMinutes])
+  }, [applyPingUpdate, currentRequest, socket])
 
   useEffect(() => {
     if (!currentRequest?.id) return
@@ -252,7 +250,7 @@ export function AgentBottomSheet({
     syncRequest().catch(() => null)
 
     return () => window.clearInterval(interval)
-  }, [currentRequest?.id, currentRequest?.status])
+  }, [applyPingUpdate, currentRequest?.id, currentRequest?.status])
 
   const handlePingAgent = async () => {
     if (!agent) return
@@ -380,12 +378,17 @@ export function AgentBottomSheet({
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className="fixed bottom-0 left-0 right-0 z-[1600] mx-auto w-full rounded-t-2xl bg-white shadow-2xl sm:max-w-md"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="agent-sheet-title"
           >
             <div className="max-h-[84vh] overflow-y-auto p-5 sm:p-6">
               {/* Close Button */}
               <button
+                type="button"
                 onClick={handleClose}
                 className="absolute top-4 right-4 p-2 hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Fechar detalhes do agente"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -399,7 +402,7 @@ export function AgentBottomSheet({
                 >
                   {/* Agent Info */}
                   <div>
-                    <h3 className="text-2xl font-bold text-gray-900">{agent.name}</h3>
+                    <h3 id="agent-sheet-title" className="text-2xl font-bold text-gray-900">{agent.name}</h3>
                     <div className="flex items-center gap-2 mt-2">
                       <MapPin className="w-4 h-4 text-gray-600" />
                       <p className="text-gray-600">{agent.location}</p>
@@ -802,13 +805,15 @@ export function AgentBottomSheet({
                     </div>
                   ) : (
                     <>
-                      <div className="flex justify-center gap-2">
+                      <div className="flex justify-center gap-2" role="radiogroup" aria-label="Classificacao do agente">
                         {[1, 2, 3, 4, 5].map((value) => (
                           <button
                             key={value}
                             type="button"
                             onClick={() => setRating(value)}
                             className="p-1"
+                            aria-label={`Dar ${value} estrela${value === 1 ? '' : 's'}`}
+                            aria-pressed={value === rating}
                           >
                             <Star
                               className={`h-9 w-9 ${value <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}

@@ -51,7 +51,10 @@ export function ChatBox({ agentId, agentName, onPing }: ChatBoxProps) {
   useEffect(() => {
     const currentUser = getCurrentUser()
     setUser(currentUser)
-    if (!currentUser) return
+    if (!currentUser) {
+      setLoading(false)
+      return
+    }
     setMessages(readMessages(currentUser.id, agentId))
     setLoading(false)
   }, [agentId])
@@ -149,7 +152,11 @@ export function ChatBox({ agentId, agentName, onPing }: ChatBoxProps) {
           </Button>
         )}
         <form onSubmit={handleSendMessage} className="flex gap-2">
+          <label htmlFor="chat-message" className="sr-only">
+            Escreva uma mensagem para o agente
+          </label>
           <Input
+            id="chat-message"
             type="text"
             placeholder="Escreva sua mensagem..."
             value={inputText}
@@ -161,6 +168,7 @@ export function ChatBox({ agentId, agentName, onPing }: ChatBoxProps) {
             type="submit"
             disabled={!inputText.trim() || loading}
             className="rounded-full bg-[#E60000] text-white hover:bg-red-700"
+            aria-label="Enviar mensagem"
           >
             <Send className="h-4 w-4" />
           </Button>

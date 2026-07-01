@@ -8,7 +8,7 @@ import { Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { authService } from '@/lib/services'
+import { authService } from '@/lib/services/auth'
 import { getErrorMessage } from '@/lib/runtime'
 
 export default function RegisterPage() {
@@ -53,7 +53,7 @@ export default function RegisterPage() {
 
       // Redirect based on type
       if (formData.type === 'agent') {
-        router.push('/agent-dashboard')
+        router.push('/app/agent-dashboard')
       } else {
         router.push('/app/map')
       }
